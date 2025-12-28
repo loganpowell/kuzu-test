@@ -61,12 +61,15 @@ node benchmark_queries.js
 ### WASM Benchmarks
 
 ```bash
-# Start server
-python -m http.server 8080
+# Start server with automatic result saving
+cd benchmarks/wasm
+python server.py
 
 # Open in browser
 open http://localhost:8080/benchmarks/wasm/
 ```
+
+**Note**: Results are automatically saved to `results/` when you click "Export Results".
 
 ### Generate Report
 

@@ -160,6 +160,21 @@
     <div class="benchmark-section">
       <h2>💾 Memory Usage</h2>
       <div id="memoryResults" class="results">Monitoring...</div>
+      <div
+        style="
+          margin-top: 10px;
+          padding: 10px;
+          background-color: #fff3cd;
+          border-left: 4px solid #ffc107;
+          font-size: 0.9em;
+        "
+      >
+        <strong>💡 For accurate memory measurements:</strong><br />
+        Launch Chrome with:
+        <code>--enable-precise-memory-info --js-flags="--expose-gc"</code><br />
+        This enables precise memory API and manual garbage collection for
+        cleaner baselines.
+      </div>
     </div>
 
     <script type="module" src="./benchmark.js"></script>

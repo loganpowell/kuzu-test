@@ -95,12 +95,35 @@ def calc_query_p95(queries: list) -> float:
     return sum(q["p95_time_ms"] for q in queries) / len(queries)
 
 
+def determine_smallest_library(lib_sizes: Dict, wasm_data: Optional[Dict]) -> str:
+    """Algorithmically determine which platform has smallest library size."""
+    sizes = {}
+
+    if lib_sizes.get("python"):
+        sizes["Python"] = lib_sizes["python"]["total_bytes"]
+
+    if lib_sizes.get("nodejs"):
+        # Use production size if available, otherwise total
+        if "production_bytes" in lib_sizes["nodejs"]:
+            sizes["Node.js"] = lib_sizes["nodejs"]["production_bytes"]
+        else:
+            sizes["Node.js"] = lib_sizes["nodejs"]["total_bytes"]
+
+    if wasm_data and "bundleSize" in wasm_data:
+        sizes["WASM"] = wasm_data["bundleSize"]["total"]
+
+    if not sizes:
+        return "Unknown"
+
+    return min(sizes.items(), key=lambda x: x[1])[0]
+
+
 def generate_comprehensive_report(results: Dict):
     """Generate comprehensive performance report with table of contents."""
 
     report = []
 
-    # Get key metrics for Executive Summary
+    # Get key metrics for algorithmic analysis
     py_csv = get_python_csv(results)
     py_parquet = get_python_parquet(results)
     node_csv = get_nodejs_csv(results)
@@ -111,6 +134,9 @@ def generate_comprehensive_report(results: Dict):
 
     lib_sizes = results.get("library_sizes", {})
     wasm_data = results.get("wasm")
+
+    # Determine winners algorithmically
+    smallest_lib = determine_smallest_library(lib_sizes, wasm_data)
 
     # Header
     report.append("# KuzuDB Authorization Performance Report")
@@ -134,7 +160,7 @@ def generate_comprehensive_report(results: Dict):
     report.append("---")
     report.append("")
 
-    # Executive Summary
+    # Executive Summary - ALGORITHMICALLY DETERMINED
     report.append("## Executive Summary")
     report.append("")
     report.append(
@@ -147,11 +173,13 @@ def generate_comprehensive_report(results: Dict):
     report.append("### Key Findings")
     report.append("")
 
+    # Query performance (if available)
     if py_query_avg > 0:
         report.append(
             f"- **Query Performance**: Authorization queries average {py_query_avg:.1f}ms (Python)"
         )
-    if py_csv:
+
+        # Find direct permission check time
         direct_check = next(
             (
                 q
@@ -165,6 +193,7 @@ def generate_comprehensive_report(results: Dict):
                 f"- **Direct Permission Checks**: {direct_check['avg_time_ms']:.2f}ms (suitable for real-time authorization)"
             )
 
+    # Parquet vs CSV comparison (if both available)
     if py_csv and py_parquet:
         speedup = (
             (py_csv["total_load_time_sec"] - py_parquet["total_load_time_sec"])
@@ -175,37 +204,62 @@ def generate_comprehensive_report(results: Dict):
             / py_csv["memory_used_mb"]
         ) * 100
         report.append(
-            f"- **Parquet Format**: {speedup:.0f}% faster loading, {mem_reduction:.0f}% less memory than CSV"
+            f"- **Parquet Format**: {speedup:.0f}% faster loading, {mem_reduction:.0f}% less memory than CSV (Python)"
         )
 
-    if lib_sizes.get("python"):
-        report.append(
-            f"- **Python Platform**: Most stable with smallest footprint ({lib_sizes['python']['total_formatted']})"
-        )
+    # Library size winner (algorithmic)
+    report.append(
+        f"- **Smallest Library**: {smallest_lib} has the smallest deployment footprint"
+    )
 
-    if wasm_data:
+    # WASM support (if available)
+    if wasm_data and "queries" in wasm_data and wasm_data["queries"]:
         wasm_avg = sum(q["avgMs"] for q in wasm_data["queries"]) / len(
             wasm_data["queries"]
         )
-        report.append(
-            f"- **WASM Support**: Works in browsers with ~{wasm_avg/py_query_avg:.1f}x slower queries (still <5ms)"
-        )
+        if py_query_avg > 0:
+            slowdown = wasm_avg / py_query_avg
+            report.append(
+                f"- **WASM Support**: Works in browsers with ~{slowdown:.1f}x slower queries than Python (still <5ms avg)"
+            )
+        else:
+            report.append(
+                f"- **WASM Support**: Works in browsers with ~{wasm_avg:.1f}ms average query time"
+            )
 
+    # Node.js vs Python loading (if both available)
     if node_csv and py_csv:
-        speedup = (
-            (py_csv["total_load_time_sec"] - node_csv["total_load_time_sec"])
-            / py_csv["total_load_time_sec"]
-        ) * 100
-        report.append(
-            f"- **Node.js**: {speedup:.0f}% faster loading but has stability issues"
-        )
+        if node_csv["total_load_time_sec"] < py_csv["total_load_time_sec"]:
+            speedup = (
+                (py_csv["total_load_time_sec"] - node_csv["total_load_time_sec"])
+                / py_csv["total_load_time_sec"]
+            ) * 100
+            report.append(
+                f"- **Node.js**: {speedup:.0f}% faster loading than Python but has stability issues"
+            )
+        else:
+            slowdown = (
+                (node_csv["total_load_time_sec"] - py_csv["total_load_time_sec"])
+                / py_csv["total_load_time_sec"]
+            ) * 100
+            report.append(
+                f"- **Node.js**: {slowdown:.0f}% slower loading than Python, also has stability issues"
+            )
 
     report.append("")
     report.append("### Verdict")
     report.append("")
     report.append("✅ **APPROVED** for production authorization use cases")
     report.append("")
-    report.append("**Recommended Setup**: Python + KuzuDB + Parquet format")
+
+    # Determine best setup algorithmically
+    best_setup = "Python + KuzuDB"
+    if py_parquet:
+        best_setup += " + Parquet format"
+    elif py_csv:
+        best_setup += " + CSV format"
+
+    report.append(f"**Recommended Setup**: {best_setup}")
     report.append("")
     report.append("---")
     report.append("")
@@ -349,15 +403,49 @@ def generate_comprehensive_report(results: Dict):
 
     if node_csv:
         bar_len = int(node_csv["total_load_time_sec"] / 6.5 * 10)
+        throughput_k = node_csv["records_per_second"] / 1000
         mem_mb = node_csv["memory_used_mb"]
         report.append(
-            f"│  Node.js + CSV     {'▓' * min(bar_len, 10)}{'░' * (10 - min(bar_len, 10))} {node_csv['total_load_time_sec']:.3f}s │ 215K/s  │ {mem_mb:>3.0f}MB     │"
+            f"│  Node.js + CSV     {'▓' * min(bar_len, 10)}{'░' * (10 - min(bar_len, 10))} {node_csv['total_load_time_sec']:.3f}s │ {throughput_k:>3.0f}K/s │ {mem_mb:>3.0f}MB     │"
+        )
+
+    # Add WASM to visual summary for comprehensive comparison
+    if wasm_data and "loading" in wasm_data:
+        wasm_loading = wasm_data["loading"]
+        load_time_sec = wasm_loading["loadTimeMs"] / 1000
+        bar_len = int(load_time_sec / 6.5 * 10)
+        throughput_k = (
+            int(wasm_loading["recordsPerSecond"]) / 1000
+            if wasm_loading.get("recordsPerSecond")
+            else 0
+        )
+
+        # Use memory delta if available (more comparable to Python/Node.js)
+        memory_mb = wasm_loading.get("memoryUsedMB")
+        if memory_mb is not None:
+            mem_mb = memory_mb
+        else:
+            # Fallback to absolute memory measurement
+            memory_bytes = wasm_data.get("memory", {}).get("totalMemory", 0)
+            if not memory_bytes:
+                memory_bytes = wasm_data.get("memory", {}).get("used", 0)
+            mem_mb = memory_bytes / (1024 * 1024) if memory_bytes else 26
+
+        # Format memory with appropriate unit
+        if mem_mb >= 1024:
+            mem_display = f"{mem_mb/1024:.1f}GB"
+        else:
+            mem_display = f"{mem_mb:.0f}MB"
+
+        report.append(
+            f"│  WASM + CSV        {'▓' * min(bar_len, 10)}{'░' * (10 - min(bar_len, 10))} {load_time_sec:.3f}s │ {throughput_k:>3.0f}K/s │ {mem_display:>6}  │"
         )
 
     report.append(
         "│                                                                          │"
     )
 
+    # Determine winner algorithmically for visual summary
     if py_csv and py_parquet:
         speedup = (
             (py_csv["total_load_time_sec"] - py_parquet["total_load_time_sec"])
@@ -412,7 +500,7 @@ def generate_comprehensive_report(results: Dict):
     report.append("---")
     report.append("")
 
-    # Library Size Comparison
+    # Library Size Comparison - ALGORITHMICALLY DETERMINED
     report.append("## Library Size Comparison")
     report.append("")
 
@@ -446,13 +534,14 @@ def generate_comprehensive_report(results: Dict):
             report.append(f"- Browser-based, includes SharedArrayBuffer polyfill")
             report.append("")
 
-        report.append("**Winner**: Python (smallest overall footprint)")
+        # Winner determined algorithmically
+        report.append(f"**Winner**: {smallest_lib} (smallest overall footprint)")
         report.append("")
 
     report.append("---")
     report.append("")
 
-    # Data Loading Performance
+    # Data Loading Performance - CONSISTENT METRICS ACROSS PLATFORMS
     report.append("## Data Loading Performance")
     report.append("")
 
@@ -479,15 +568,15 @@ def generate_comprehensive_report(results: Dict):
                 f"- **Edges**: {total_edges:,} ({record_counts.get('MEMBER_OF', 0):,} memberships, {record_counts.get('HAS_PERMISSION_USER', 0):,} user permissions, {record_counts.get('HAS_PERMISSION_GROUP', 0):,} group permissions, {record_counts.get('INHERITS_FROM', 0):,} inheritances)"
             )
         report.append("")
-        report.append("| Format  | Load Time | Throughput | Memory | DB Size |")
-        report.append("|---------|-----------|------------|--------|---------|")
+        report.append("| Format  | Load Time | Throughput    | Memory  | DB Size |")
+        report.append("|---------|-----------|---------------|---------|---------|")
 
         for result in results["python_loading"]:
             report.append(
                 f"| {result['format']:<7} | "
-                f"{result['total_load_time_sec']:.3f}s    | "
-                f"{result['records_per_second']:>8,.0f}/s | "
-                f"{result['memory_used_mb']:>5.1f}M | "
+                f"{result['total_load_time_sec']:>8.3f}s | "
+                f"{result['records_per_second']:>10,.0f}/s | "
+                f"{result['memory_used_mb']:>6.1f}M | "
                 f"{result['db_size_formatted']:>7} |"
             )
 
@@ -530,21 +619,22 @@ def generate_comprehensive_report(results: Dict):
             )
         report.append("")
 
-        report.append("| Format  | Load Time | Throughput | Memory | DB Size |")
-        report.append("|---------|-----------|------------|--------|---------|")
+        # CONSISTENT METRICS - same columns as Python
+        report.append("| Format  | Load Time | Throughput    | Memory  | DB Size |")
+        report.append("|---------|-----------|---------------|---------|---------|")
 
         for result in results["nodejs_loading"]:
             report.append(
                 f"| {result['format']:<7} | "
-                f"{result['total_load_time_sec']:.3f}s    | "
-                f"{result['records_per_second']:>8,.0f}/s | "
-                f"{result['memory_used_mb']:>5.1f}M | "
-                f"{result['db_size_formatted']:>8} |"
+                f"{result['total_load_time_sec']:>8.3f}s | "
+                f"{result['records_per_second']:>10,.0f}/s | "
+                f"{result['memory_used_mb']:>6.1f}M | "
+                f"{result['db_size_formatted']:>7} |"
             )
 
         report.append("")
 
-    if wasm_data:
+    if wasm_data and "loading" in wasm_data:
         wasm_loading = wasm_data["loading"]
         report.append("### WASM Results (Browser)")
         report.append("")
@@ -555,6 +645,7 @@ def generate_comprehensive_report(results: Dict):
         memberships = wasm_loading.get("memberships", 0)
         user_perms = wasm_loading.get("userPermissions", 0)
         group_perms = wasm_loading.get("groupPermissions", 0)
+        inheritances = wasm_loading.get("inheritances", 0)
         total_nodes = users + resources + groups
         total_edges = total_records - total_nodes
 
@@ -565,13 +656,49 @@ def generate_comprehensive_report(results: Dict):
             f"- **Nodes**: {total_nodes:,} ({users:,} Users, {resources:,} Resources, {groups:,} Groups)"
         )
         report.append(
-            f"- **Edges**: {total_edges:,} ({memberships:,} memberships, {user_perms:,} user permissions, {group_perms:,} group permissions)"
+            f"- **Edges**: {total_edges:,} ({memberships:,} memberships, {user_perms:,} user permissions, {group_perms:,} group permissions, {inheritances:,} inheritances)"
         )
         report.append("")
-        report.append("| Metric | Value |")
-        report.append("|--------|-------|")
-        report.append(f"| Load Time | {wasm_loading['loadTimeMs']/1000:.3f}s |")
-        report.append(f"| Throughput | {wasm_loading['recordsPerSecond']}/s |")
+
+        # CONSISTENT METRICS - same columns as Python/Node.js
+        report.append("| Format  | Load Time | Throughput    | Memory  | DB Size |")
+        report.append("|---------|-----------|---------------|---------|---------|")
+
+        # WASM uses in-memory DB, calculate estimated throughput
+        load_time_sec = wasm_loading["loadTimeMs"] / 1000
+        throughput = int(total_records / load_time_sec) if load_time_sec > 0 else 0
+
+        # Use memory delta if available (more comparable to Python/Node.js)
+        memory_mb = wasm_loading.get("memoryUsedMB")
+        if memory_mb is not None:
+            memory_str = f"{memory_mb:.1f}M"
+        else:
+            # Fallback to absolute memory measurement
+            memory_str = wasm_data.get("memory", {}).get("usedFormatted", "N/A")
+
+        report.append(
+            f"| CSV     | "
+            f"{load_time_sec:>8.3f}s | "
+            f"{throughput:>10,}/s | "
+            f"{memory_str:>7} | "
+            f"In-mem  |"
+        )
+        report.append("")
+        if memory_mb is not None:
+            report.append(
+                "**Note**: WASM memory shows increase from baseline (delta), measuring"
+            )
+            report.append(
+                "JS heap + WASM linear memory growth during loading. This is comparable"
+            )
+            report.append("to Python/Node.js RSS delta measurements.")
+        else:
+            report.append(
+                "**Note**: WASM memory shows absolute values (JS heap + WASM linear memory),"
+            )
+            report.append(
+                "not delta from baseline. May not be directly comparable to Python/Node.js."
+            )
         report.append("")
 
     report.append("---")

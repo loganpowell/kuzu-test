@@ -3,6 +3,7 @@
 
 let db = null;
 let conn = null;
+let kuzuModule = null; // Cache the WASM module
 let benchmarkResults = {
   bundleSize: {},
   loading: {},
@@ -88,20 +89,45 @@ async function measureBundleSize() {
 // Initialize KuzuDB WASM
 async function initKuzuDB() {
   try {
-    updateStatus("Loading KuzuDB WASM module...", "loading");
+    // Only load the module once - cache it
+    if (!kuzuModule) {
+      updateStatus("Loading KuzuDB WASM module...", "loading");
+      console.log("[KuzuDB] Loading WASM module for the first time...");
 
-    // Dynamic import of KuzuDB WASM (correct package name)
-    const kuzu_wasm = await import(
-      "https://unpkg.com/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js"
-    );
+      // Dynamic import of KuzuDB WASM (correct package name)
+      const kuzu_wasm = await import(
+        "https://unpkg.com/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js"
+      );
 
-    // Initialize the WASM module
-    const kuzu = await kuzu_wasm.default();
-    window.kuzu = kuzu;
+      // Initialize the WASM module - do this only once
+      kuzuModule = await kuzu_wasm.default();
+      window.kuzu = kuzuModule;
+      console.log("[KuzuDB] WASM module loaded and cached");
+    } else {
+      console.log("[KuzuDB] Reusing cached WASM module");
+    }
 
     updateStatus("Creating in-memory database...", "loading");
-    db = await kuzu.Database();
-    conn = await kuzu.Connection(db);
+
+    // Close existing connections if any
+    if (conn) {
+      try {
+        await conn.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
+    if (db) {
+      try {
+        await db.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
+
+    // Create new database and connection
+    db = await kuzuModule.Database();
+    conn = await kuzuModule.Connection(db);
 
     updateStatus("✅ KuzuDB WASM initialized successfully!", "success");
 
@@ -109,11 +135,16 @@ async function initKuzuDB() {
     btnLoadData.disabled = false;
     btnClearDB.disabled = false;
 
-    // Measure bundle size
-    await measureBundleSize();
+    // Measure bundle size (only on first load)
+    if (!benchmarkResults.bundleSize.total) {
+      await measureBundleSize();
+    }
 
-    // Start memory monitoring
-    startMemoryMonitoring();
+    // Start memory monitoring (only once)
+    if (!window.memoryMonitoringStarted) {
+      startMemoryMonitoring();
+      window.memoryMonitoringStarted = true;
+    }
 
     return true;
   } catch (error) {
@@ -148,31 +179,8 @@ async function createSchema() {
   }
 }
 
-// Parse CSV data
-function parseCSV(csvText) {
-  const lines = csvText.trim().split("\n");
-  const headers = lines[0].split(",").map((h) => h.trim());
-  const data = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const values = lines[i].split(",").map((v) => v.trim());
-    const row = {};
-    headers.forEach((header, index) => {
-      let value = values[index];
-      // Convert boolean strings
-      if (value === "true") value = true;
-      else if (value === "false") value = false;
-      // Keep as string otherwise
-      row[header] = value;
-    });
-    data.push(row);
-  }
-  return data;
-}
-
-// Fetch CSV data from server (uses same data as Python/Node.js)
-async function fetchCSVData() {
+// Fetch CSV files and write them to WASM filesystem for COPY FROM
+async function fetchAndWriteCSVFiles() {
   const baseUrl = "../../data/csv/";
   const files = [
     "users.csv",
@@ -184,195 +192,195 @@ async function fetchCSVData() {
     "inherits_from.csv",
   ];
 
-  updateStatus("Fetching CSV data from server...", "loading");
+  updateStatus("Fetching CSV files from server...", "loading");
 
-  const results = {};
+  const counts = {};
   for (const file of files) {
     const response = await fetch(baseUrl + file);
     if (!response.ok) {
       throw new Error(`Failed to fetch ${file}: ${response.statusText}`);
     }
     const csvText = await response.text();
-    const key = file.replace(".csv", "").replace(/_/g, "");
-    results[key] = parseCSV(csvText);
+
+    // Count lines for reporting (excluding header)
+    const lines = csvText.trim().split("\n");
+    counts[file] = lines.length - 1; // Subtract header
+
+    // Write to WASM filesystem
+    await window.kuzu.FS.writeFile(`/${file}`, csvText);
+  }
+
+  return counts;
+}
+
+// Get current memory snapshot (synchronous, for benchmarking)
+function getMemorySnapshot() {
+  if (!performance.memory) {
+    return null;
+  }
+
+  const jsHeapUsed = performance.memory.usedJSHeapSize;
+  let wasmMemory = 0;
+
+  try {
+    if (window.kuzu && window.kuzu.HEAP8) {
+      wasmMemory = window.kuzu.HEAP8.length;
+    } else if (window.kuzu && window.kuzu.buffer) {
+      wasmMemory = window.kuzu.buffer.byteLength;
+    }
+  } catch (e) {
+    // WASM memory not accessible
   }
 
   return {
-    users: results.users,
-    resources: results.resources,
-    groups: results.groups,
-    userPermissions: results.userpermissions,
-    groupPermissions: results.grouppermissions,
-    memberships: results.memberof,
-    inheritances: results.inheritsfrom,
+    bytes: jsHeapUsed + wasmMemory,
+    jsHeapUsed,
+    wasmMemory,
+    method: "performance.memory",
   };
 }
 
-// Load data into database
+// Get accurate memory measurement (async, waits for GC - use after benchmarks)
+async function getAccurateMemory() {
+  // Try performance.measureUserAgentSpecificMemory() (more accurate)
+  // See: https://web.dev/articles/monitor-total-page-memory-usage
+  if (
+    window.crossOriginIsolated &&
+    performance.measureUserAgentSpecificMemory
+  ) {
+    try {
+      const result = await performance.measureUserAgentSpecificMemory();
+      return {
+        bytes: result.bytes,
+        method: "measureUserAgentSpecificMemory",
+        breakdown: result.breakdown,
+      };
+    } catch (error) {
+      console.warn("measureUserAgentSpecificMemory failed:", error);
+    }
+  }
+
+  // Fallback to synchronous snapshot
+  return getMemorySnapshot();
+}
+
+// Load data into database using COPY FROM
 async function loadData() {
   try {
     btnLoadData.disabled = true;
-    updateStatus("Fetching CSV data from server...", "loading");
+    updateStatus("Fetching CSV files from server...", "loading");
+
+    // Force garbage collection if available (helps get clean baseline)
+    if (window.gc) {
+      window.gc();
+    }
+
+    // Take baseline memory snapshot BEFORE loading (synchronous, no blocking)
+    const memoryBefore = getMemorySnapshot();
 
     const startTime = performance.now();
 
     // Create schema
     await createSchema();
 
-    // Fetch CSV data from server (same as Python/Node.js)
-    const data = await fetchCSVData();
-    loadingResultsDiv.innerHTML = `Loaded from CSV:\n- ${data.users.length} users\n- ${data.resources.length} resources\n- ${data.groups.length} groups\n- ${data.userPermissions.length} user permissions\n- ${data.groupPermissions.length} group permissions\n- ${data.memberships.length} memberships\n- ${data.inheritances.length} inheritances`;
+    // Fetch CSV files and write them to WASM filesystem
+    const counts = await fetchAndWriteCSVFiles();
+    loadingResultsDiv.innerHTML = `Loaded from CSV:\n- ${counts["users.csv"]} users\n- ${counts["resources.csv"]} resources\n- ${counts["groups.csv"]} groups\n- ${counts["user_permissions.csv"]} user permissions\n- ${counts["group_permissions.csv"]} group permissions\n- ${counts["member_of.csv"]} memberships\n- ${counts["inherits_from.csv"]} inheritances`;
 
-    // Load users
+    // Use COPY FROM to bulk load data (much faster than row-by-row inserts)
     updateStatus("Loading users...", "loading");
-    loadProgressBar.style.width = "10%";
-    for (const user of data.users) {
-      await conn.execute(
-        `CREATE (u:User {id: $id, name: $name, email: $email})`,
-        { id: user.id, name: user.name, email: user.email }
-      );
-    }
+    loadProgressBar.style.width = "14%";
+    await conn.execute("COPY User FROM '/users.csv' (HEADER=true)");
 
-    // Load resources
     updateStatus("Loading resources...", "loading");
-    loadProgressBar.style.width = "20%";
-    for (const resource of data.resources) {
-      await conn.execute(
-        `CREATE (r:Resource {id: $id, name: $name, type: $type})`,
-        { id: resource.id, name: resource.name, type: resource.type }
-      );
-    }
+    loadProgressBar.style.width = "28%";
+    await conn.execute("COPY Resource FROM '/resources.csv' (HEADER=true)");
 
-    // Load groups
     updateStatus("Loading groups...", "loading");
-    loadProgressBar.style.width = "30%";
-    for (const group of data.groups) {
-      await conn.execute(
-        `CREATE (g:UserGroup {id: $id, name: $name, description: $desc})`,
-        { id: group.id, name: group.name, desc: group.description }
-      );
-    }
+    loadProgressBar.style.width = "42%";
+    await conn.execute("COPY UserGroup FROM '/groups.csv' (HEADER=true)");
 
-    // Load memberships
     updateStatus("Loading memberships...", "loading");
-    loadProgressBar.style.width = "45%";
-    for (const member of data.memberships) {
-      await conn.execute(
-        `MATCH (u:User {id: $uid}), (g:UserGroup {id: $gid})
-         CREATE (u)-[:MEMBER_OF {joined_at: $joined, role: $role}]->(g)`,
-        {
-          uid: member.user_id,
-          gid: member.group_id,
-          joined: member.joined_at,
-          role: member.role,
-        }
-      );
-    }
+    loadProgressBar.style.width = "56%";
+    await conn.execute("COPY MEMBER_OF FROM '/member_of.csv' (HEADER=true)");
 
-    // Load user permissions
     updateStatus("Loading user permissions...", "loading");
-    loadProgressBar.style.width = "60%";
-    for (const perm of data.userPermissions) {
-      await conn.execute(
-        `MATCH (u:User {id: $uid}), (r:Resource {id: $rid})
-         CREATE (u)-[:HAS_PERMISSION_USER {
-           can_create: $create, can_read: $read, 
-           can_update: $update, can_delete: $delete,
-           granted_at: $granted, granted_by: $by
-         }]->(r)`,
-        {
-          uid: perm.user_id,
-          rid: perm.resource_id,
-          create: perm.can_create,
-          read: perm.can_read,
-          update: perm.can_update,
-          delete: perm.can_delete,
-          granted: perm.granted_at,
-          by: perm.granted_by,
-        }
-      );
-    }
+    loadProgressBar.style.width = "70%";
+    await conn.execute(
+      "COPY HAS_PERMISSION_USER FROM '/user_permissions.csv' (HEADER=true)"
+    );
 
-    // Load group permissions
     updateStatus("Loading group permissions...", "loading");
-    loadProgressBar.style.width = "75%";
-    for (const perm of data.groupPermissions) {
-      await conn.execute(
-        `MATCH (g:UserGroup {id: $gid}), (r:Resource {id: $rid})
-         CREATE (g)-[:HAS_PERMISSION_GROUP {
-           can_create: $create, can_read: $read,
-           can_update: $update, can_delete: $delete,
-           granted_at: $granted, granted_by: $by
-         }]->(r)`,
-        {
-          gid: perm.group_id,
-          rid: perm.resource_id,
-          create: perm.can_create,
-          read: perm.can_read,
-          update: perm.can_update,
-          delete: perm.can_delete,
-          granted: perm.granted_at,
-          by: perm.granted_by,
-        }
-      );
-    }
+    loadProgressBar.style.width = "84%";
+    await conn.execute(
+      "COPY HAS_PERMISSION_GROUP FROM '/group_permissions.csv' (HEADER=true)"
+    );
 
-    // Load group inheritances
-    updateStatus("Loading inheritances...", "loading");
-    loadProgressBar.style.width = "90%";
-    for (const inherit of data.inheritances) {
-      await conn.execute(
-        `MATCH (g1:UserGroup {id: $parent}), (g2:UserGroup {id: $child})
-         CREATE (g2)-[:INHERITS_FROM {created_at: $created}]->(g1)`,
-        {
-          parent: inherit.parent_group_id,
-          child: inherit.child_group_id,
-          created: inherit.created_at,
-        }
-      );
-    }
+    updateStatus("Loading group inheritances...", "loading");
+    loadProgressBar.style.width = "98%";
+    await conn.execute(
+      "COPY INHERITS_FROM FROM '/inherits_from.csv' (HEADER=true)"
+    );
 
     loadProgressBar.style.width = "100%";
     const endTime = performance.now();
     const loadTime = endTime - startTime;
 
+    // Take memory snapshot AFTER loading to measure delta (synchronous, no blocking)
+    const memoryAfter = getMemorySnapshot();
+    const memoryDelta =
+      memoryAfter && memoryBefore
+        ? memoryAfter.bytes - memoryBefore.bytes
+        : null;
+
     const totalRecords =
-      data.users.length +
-      data.resources.length +
-      data.groups.length +
-      data.userPermissions.length +
-      data.groupPermissions.length +
-      data.memberships.length +
-      data.inheritances.length;
+      counts["users.csv"] +
+      counts["resources.csv"] +
+      counts["groups.csv"] +
+      counts["user_permissions.csv"] +
+      counts["group_permissions.csv"] +
+      counts["member_of.csv"] +
+      counts["inherits_from.csv"];
 
     benchmarkResults.loading = {
       loadTimeMs: loadTime,
       totalRecords,
       recordsPerSecond: (totalRecords / (loadTime / 1000)).toFixed(0),
-      users: data.users.length,
-      resources: data.resources.length,
-      groups: data.groups.length,
-      userPermissions: data.userPermissions.length,
-      groupPermissions: data.groupPermissions.length,
-      memberships: data.memberships.length,
-      inheritances: data.inheritances.length,
+      users: counts["users.csv"],
+      resources: counts["resources.csv"],
+      groups: counts["groups.csv"],
+      userPermissions: counts["user_permissions.csv"],
+      groupPermissions: counts["group_permissions.csv"],
+      memberships: counts["member_of.csv"],
+      inheritances: counts["inherits_from.csv"],
+      memoryUsedMB: memoryDelta ? memoryDelta / (1024 * 1024) : null,
+      memoryMethod: memoryAfter?.method || "unavailable",
     };
+
+    let memoryInfo = "";
+    if (memoryDelta !== null) {
+      memoryInfo = `\nMemory Used: ${formatBytes(memoryDelta)} (${
+        memoryAfter.method
+      })`;
+    }
 
     loadingResultsDiv.innerHTML = `
 ✅ Data loaded successfully!
 
 Load Time: ${formatMs(loadTime)}
 Total Records: ${totalRecords.toLocaleString()}
-Throughput: ${benchmarkResults.loading.recordsPerSecond} records/sec
+Throughput: ${
+      benchmarkResults.loading.recordsPerSecond
+    } records/sec${memoryInfo}
 
 Breakdown:
-- Users: ${data.users.length}
-- Resources: ${data.resources.length}
-- Groups: ${data.groups.length}
-- User Permissions: ${data.userPermissions.length}
-- Group Permissions: ${data.groupPermissions.length}
-- Memberships: ${data.memberships.length}
-- Inheritances: ${data.inheritances.length}
+- Users: ${counts["users.csv"]}
+- Resources: ${counts["resources.csv"]}
+- Groups: ${counts["groups.csv"]}
+- User Permissions: ${counts["user_permissions.csv"]}
+- Group Permissions: ${counts["group_permissions.csv"]}
+- Memberships: ${counts["member_of.csv"]}
+- Inheritances: ${counts["inherits_from.csv"]}
         `;
 
     updateStatus("✅ Data loaded successfully!", "success");
@@ -475,42 +483,77 @@ async function runQueryBenchmarks() {
   }
 }
 
-// Memory monitoring
+// Memory monitoring - measures both JS heap and WASM linear memory
+// Note: Uses synchronous performance.memory for real-time monitoring.
+// measureUserAgentSpecificMemory() would be more accurate but waits for GC.
 function startMemoryMonitoring() {
   setInterval(() => {
-    if (performance.memory) {
-      const used = performance.memory.usedJSHeapSize;
-      const total = performance.memory.totalJSHeapSize;
-      const limit = performance.memory.jsHeapSizeLimit;
+    const snapshot = getMemorySnapshot();
+    if (!snapshot) return;
 
-      benchmarkResults.memory = {
-        used,
-        total,
-        limit,
-        usedFormatted: formatBytes(used),
-        totalFormatted: formatBytes(total),
-        limitFormatted: formatBytes(limit),
-      };
+    const jsHeapUsed = snapshot.jsHeapUsed;
+    const wasmMemory = snapshot.wasmMemory;
+    const jsHeapTotal = performance.memory?.totalJSHeapSize || 0;
+    const jsHeapLimit = performance.memory?.jsHeapSizeLimit || 0;
 
-      memoryResultsDiv.innerHTML = `
+    benchmarkResults.memory = {
+      // Modern API measurement
+      bytes: snapshot.bytes,
+      method: snapshot.method,
+      // Legacy values for backwards compatibility
+      jsHeapUsed,
+      wasmMemory,
+      totalMemory: snapshot.bytes,
+      jsHeapTotal,
+      jsHeapLimit,
+      jsHeapUsedFormatted: formatBytes(jsHeapUsed),
+      wasmMemoryFormatted: formatBytes(wasmMemory),
+      totalMemoryFormatted: formatBytes(snapshot.bytes),
+      jsHeapTotalFormatted: formatBytes(jsHeapTotal),
+      jsHeapLimitFormatted: formatBytes(jsHeapLimit),
+      // For backwards compatibility with report
+      used: snapshot.bytes,
+      total: jsHeapTotal,
+      limit: jsHeapLimit,
+      usedFormatted: formatBytes(snapshot.bytes),
+      totalFormatted: formatBytes(jsHeapTotal),
+      limitFormatted: formatBytes(jsHeapLimit),
+    };
+
+    let memoryHTML = `
 <div class="metric">
-    <span class="metric-label">Used Heap:</span>
-    <span class="metric-value">${formatBytes(used)}</span>
+    <span class="metric-label">Total Memory:</span>
+    <span class="metric-value">${formatBytes(snapshot.bytes)}</span>
 </div>
 <div class="metric">
-    <span class="metric-label">Total Heap:</span>
-    <span class="metric-value">${formatBytes(total)}</span>
-</div>
+    <span class="metric-label">Method:</span>
+    <span class="metric-value">${snapshot.method}</span>
+</div>`;
+
+    if (snapshot.method === "performance.memory" && jsHeapUsed > 0) {
+      memoryHTML += `
 <div class="metric">
-    <span class="metric-label">Heap Limit:</span>
-    <span class="metric-value">${formatBytes(limit)}</span>
-</div>
-            `;
-    } else {
-      memoryResultsDiv.innerHTML =
-        "⚠️ Memory API not available in this browser";
+    <span class="metric-label">JS Heap Used:</span>
+    <span class="metric-value">${formatBytes(jsHeapUsed)}</span>
+</div>`;
+
+      if (wasmMemory > 0) {
+        memoryHTML += `
+<div class="metric">
+    <span class="metric-label">WASM Memory:</span>
+    <span class="metric-value">${formatBytes(wasmMemory)}</span>
+</div>`;
+      }
+
+      memoryHTML += `
+<div class="metric">
+    <span class="metric-label">JS Heap Total:</span>
+    <span class="metric-value">${formatBytes(jsHeapTotal)}</span>
+</div>`;
     }
-  }, 2000);
+
+    memoryResultsDiv.innerHTML = memoryHTML;
+  }, 1000);
 }
 
 // Clear database
@@ -526,16 +569,47 @@ async function clearDatabase() {
   }
 }
 
-// Export results
-function exportResults() {
-  const resultsJson = JSON.stringify(benchmarkResults, null, 2);
-  const blob = new Blob([resultsJson], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `kuzu-wasm-benchmark-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+// Export results - saves to server
+async function exportResults() {
+  try {
+    updateStatus("Saving results to server...", "loading");
+
+    const response = await fetch("/save-results", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(benchmarkResults, null, 2),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      updateStatus(`✅ Results saved to server: ${result.file}`, "success");
+      console.log(`Results saved: ${result.file}`);
+    } else {
+      throw new Error(`Server error: ${response.status}`);
+    }
+  } catch (error) {
+    // Fallback to local download if server save fails
+    console.warn("Server save failed, falling back to local download:", error);
+    updateStatus("⚠️ Server save failed, downloading locally...", "loading");
+
+    const resultsJson = JSON.stringify(benchmarkResults, null, 2);
+    const blob = new Blob([resultsJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kuzu-wasm-benchmark-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    setTimeout(() => {
+      updateStatus(
+        "✅ Results downloaded locally (server unavailable)",
+        "success"
+      );
+    }, 1000);
+  }
 }
 
 // Event listeners
