@@ -1,0 +1,23 @@
+{
+  "name": "kuzu-benchmarks",
+  "version": "1.0.0",
+  "description": "KuzuDB authorization benchmarks for Node.js",
+  "main": "benchmark_loading.js",
+  "scripts": {
+    "measure-size": "node measure_size.js",
+    "benchmark-loading": "node benchmark_loading.js",
+    "benchmark-queries": "node benchmark_queries.js",
+    "schema": "node schema.js"
+  },
+  "keywords": [
+    "kuzu",
+    "graph-database",
+    "benchmark",
+    "authorization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "kuzu": "^0.8.0"
+  }
+}

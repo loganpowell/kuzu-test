@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KuzuDB WASM Authorization Benchmarks</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      h1 {
+        color: #333;
+        border-bottom: 3px solid #4caf50;
+        padding-bottom: 10px;
+      }
+      h2 {
+        color: #555;
+        margin-top: 30px;
+      }
+      .status {
+        padding: 15px;
+        margin: 20px 0;
+        border-radius: 5px;
+        font-weight: bold;
+      }
+      .status.loading {
+        background-color: #fff3cd;
+        color: #856404;
+        border-left: 5px solid #ffc107;
+      }
+      .status.success {
+        background-color: #d4edda;
+        color: #155724;
+        border-left: 5px solid #28a745;
+      }
+      .status.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border-left: 5px solid #dc3545;
+      }
+      .benchmark-section {
+        background: white;
+        padding: 20px;
+        margin: 20px 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 5px;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .results {
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 4px;
+        margin-top: 15px;
+        font-family: "Courier New", monospace;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .metric {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px;
+        margin: 5px 0;
+        background: #fff;
+        border-left: 4px solid #4caf50;
+        border-radius: 4px;
+      }
+      .metric-label {
+        font-weight: bold;
+        color: #555;
+      }
+      .metric-value {
+        color: #4caf50;
+        font-weight: bold;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+      }
+      th {
+        background-color: #4caf50;
+        color: white;
+      }
+      tr:hover {
+        background-color: #f5f5f5;
+      }
+      .progress-bar {
+        width: 100%;
+        height: 20px;
+        background-color: #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 10px 0;
+      }
+      .progress-fill {
+        height: 100%;
+        background-color: #4caf50;
+        transition: width 0.3s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🚀 KuzuDB WASM Authorization Benchmarks</h1>
+
+    <div id="status" class="status loading">⏳ Initializing WASM module...</div>
+
+    <div class="benchmark-section">
+      <h2>📦 Bundle Size</h2>
+      <div id="bundleSize" class="results">Measuring...</div>
+    </div>
+
+    <div class="benchmark-section">
+      <h2>⚙️ Controls</h2>
+      <button id="btnLoadData" disabled>Load Data</button>
+      <button id="btnRunQueries" disabled>Run Query Benchmarks</button>
+      <button id="btnClearDB" disabled>Clear Database</button>
+      <button id="btnExportResults">Export Results</button>
+    </div>
+
+    <div class="benchmark-section">
+      <h2>📊 Loading Performance</h2>
+      <div class="progress-bar">
+        <div id="loadProgress" class="progress-fill" style="width: 0%"></div>
+      </div>
+      <div id="loadingResults" class="results">Waiting to start...</div>
+    </div>
+
+    <div class="benchmark-section">
+      <h2>⚡ Query Performance</h2>
+      <div id="queryResults" class="results">Waiting to start...</div>
+    </div>
+
+    <div class="benchmark-section">
+      <h2>💾 Memory Usage</h2>
+      <div id="memoryResults" class="results">Monitoring...</div>
+    </div>
+
+    <script type="module" src="./benchmark.js"></script>
+  </body>
+</html>

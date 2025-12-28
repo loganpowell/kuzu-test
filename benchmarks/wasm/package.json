@@ -1,0 +1,12 @@
+{
+  "name": "kuzu-wasm-benchmarks",
+  "version": "1.0.0",
+  "description": "Browser-based benchmarks for KuzuDB WASM",
+  "scripts": {
+    "start": "npx serve .",
+    "dev": "npx serve . -p 8080"
+  },
+  "dependencies": {
+    "@kuzu/kuzu-wasm": "^0.8.2"
+  }
+}

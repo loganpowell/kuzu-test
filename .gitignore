@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+
+# Database files
+db/*
+!db/.gitkeep
+
+# Data files
+data/csv/*.csv
+data/parquet/*.parquet
+data/json/*.json
+!data/**/.gitkeep
+
+# Results
+results/*
+!results/.gitkeep
+
+# Node.js
+node_modules/
+package-lock.json
+yarn.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
