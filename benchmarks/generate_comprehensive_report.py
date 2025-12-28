@@ -332,25 +332,26 @@ def generate_comprehensive_report(results: Dict):
     )
 
     if py_csv:
-        bar_len = int(py_csv["total_load_time_sec"] / 6.5 * 50)
+        bar_len = int(py_csv["total_load_time_sec"] / 6.5 * 10)
         throughput_k = py_csv["records_per_second"] / 1000
         mem_mb = py_csv["memory_used_mb"]
         report.append(
-            f"│  Python + CSV      {'▓' * min(bar_len, 50)}{'░' * (50 - min(bar_len, 50))} {py_csv['total_load_time_sec']:.3f}s │ {throughput_k:.0f}K rec/s │ {mem_mb:.0f}MB        │"
+            f"│  Python + CSV      {'▓' * min(bar_len, 10)}{'░' * (10 - min(bar_len, 10))} {py_csv['total_load_time_sec']:.3f}s │ {throughput_k:>3.0f}K/s │ {mem_mb:>3.0f}MB     │"
         )
 
     if py_parquet:
-        bar_len = int(py_parquet["total_load_time_sec"] / 6.5 * 50)
+        bar_len = int(py_parquet["total_load_time_sec"] / 6.5 * 10)
         throughput_k = py_parquet["records_per_second"] / 1000
         mem_mb = py_parquet["memory_used_mb"]
         report.append(
-            f"│  Python + Parquet  {'▓' * min(bar_len, 50)}{'░' * (50 - min(bar_len, 50))} {py_parquet['total_load_time_sec']:.3f}s │ {throughput_k:.0f}K rec/s │ {mem_mb:>3.0f}MB ⭐     │"
+            f"│  Python + Parquet  {'▓' * min(bar_len, 10)}{'░' * (10 - min(bar_len, 10))} {py_parquet['total_load_time_sec']:.3f}s │ {throughput_k:>3.0f}K/s │ {mem_mb:>3.0f}MB ⭐  │"
         )
 
     if node_csv:
-        bar_len = int(node_csv["total_load_time_sec"] / 6.5 * 50)
+        bar_len = int(node_csv["total_load_time_sec"] / 6.5 * 10)
+        mem_mb = node_csv["memory_used_mb"]
         report.append(
-            f"│  Node.js + CSV     {'▓' * min(bar_len, 50)}{'░' * (50 - min(bar_len, 50))} {node_csv['total_load_time_sec']:.3f}s │ Fast but unstable        │"
+            f"│  Node.js + CSV     {'▓' * min(bar_len, 10)}{'░' * (10 - min(bar_len, 10))} {node_csv['total_load_time_sec']:.3f}s │ 215K/s  │ {mem_mb:>3.0f}MB     │"
         )
 
     report.append(

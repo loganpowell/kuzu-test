@@ -11,16 +11,16 @@ class MemoryMonitor {
   }
 
   start() {
-    this.baseline = process.memoryUsage().heapUsed;
+    this.baseline = process.memoryUsage().rss;
   }
 
   getCurrentMB() {
-    return process.memoryUsage().heapUsed / (1024 * 1024);
+    return process.memoryUsage().rss / (1024 * 1024);
   }
 
   getDeltaMB() {
     if (this.baseline === null) return 0;
-    const current = process.memoryUsage().heapUsed;
+    const current = process.memoryUsage().rss;
     return (current - this.baseline) / (1024 * 1024);
   }
 }
