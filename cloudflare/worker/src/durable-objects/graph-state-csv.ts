@@ -54,6 +54,10 @@ export class GraphStateCSV {
         return await this.handleStats();
       } else if (path === "/grant" || path.endsWith("/grant")) {
         return await this.handleGrant(request);
+      } else if (path === "/data" || path.endsWith("/data")) {
+        return await this.handleDataEndpoint();
+      } else if (path === "/csv" || path.endsWith("/csv")) {
+        return await this.handleCSVEndpoint();
       }
 
       return this.jsonResponse({ error: "Unknown path" }, 400);
@@ -384,12 +388,232 @@ export class GraphStateCSV {
   }
 
   /**
+   * Serve graph data in JSON format for client SDK
+   */
+  private async handleDataEndpoint(): Promise<Response> {
+    try {
+      // Convert Map-based indexes to arrays for client
+      const users: Array<{ id: string }> = [];
+      const groups: Array<{ id: string }> = [];
+      const resources: Array<{ id: string }> = [];
+      const member_of: Array<{ user_id: string; group_id: string }> = [];
+      const inherits_from: Array<{
+        group_id: string;
+        parent_group_id: string;
+      }> = [];
+      const user_permissions: Array<{
+        user_id: string;
+        resource_id: string;
+        capability: string;
+      }> = [];
+      const group_permissions: Array<{
+        group_id: string;
+        resource_id: string;
+        capability: string;
+      }> = [];
+
+      // Extract unique users
+      const userIds = new Set<string>();
+      for (const userId of this.userPermIndex.keys()) {
+        userIds.add(userId);
+      }
+      for (const userId of this.memberOfIndex.keys()) {
+        userIds.add(userId);
+      }
+      for (const userId of userIds) {
+        users.push({ id: userId });
+      }
+
+      // Extract unique groups
+      const groupIds = new Set<string>();
+      for (const groupId of this.groupPermIndex.keys()) {
+        groupIds.add(groupId);
+      }
+      for (const groupId of this.inheritsFromIndex.keys()) {
+        groupIds.add(groupId);
+      }
+      for (const groups of this.memberOfIndex.values()) {
+        for (const groupId of groups) {
+          groupIds.add(groupId);
+        }
+      }
+      for (const parentId of this.inheritsFromIndex.values()) {
+        groupIds.add(parentId);
+      }
+      for (const groupId of groupIds) {
+        groups.push({ id: groupId });
+      }
+
+      // Extract unique resources
+      const resourceIds = new Set<string>();
+      for (const permissions of this.userPermIndex.values()) {
+        for (const resourceId of permissions.keys()) {
+          resourceIds.add(resourceId);
+        }
+      }
+      for (const permissions of this.groupPermIndex.values()) {
+        for (const resourceId of permissions.keys()) {
+          resourceIds.add(resourceId);
+        }
+      }
+      for (const resourceId of resourceIds) {
+        resources.push({ id: resourceId, name: resourceId });
+      }
+
+      // Extract member_of relationships
+      for (const [userId, groupSet] of this.memberOfIndex) {
+        for (const groupId of groupSet) {
+          member_of.push({ user_id: userId, group_id: groupId });
+        }
+      }
+
+      // Extract inherits_from relationships
+      for (const [groupId, parentId] of this.inheritsFromIndex) {
+        inherits_from.push({ group_id: groupId, parent_group_id: parentId });
+      }
+
+      // Extract user permissions
+      for (const [userId, permissions] of this.userPermIndex) {
+        for (const [resourceId, perm] of permissions) {
+          if (perm.can_create) {
+            user_permissions.push({
+              user_id: userId,
+              resource_id: resourceId,
+              capability: "create",
+            });
+          }
+          if (perm.can_read) {
+            user_permissions.push({
+              user_id: userId,
+              resource_id: resourceId,
+              capability: "read",
+            });
+          }
+          if (perm.can_update) {
+            user_permissions.push({
+              user_id: userId,
+              resource_id: resourceId,
+              capability: "update",
+            });
+          }
+          if (perm.can_delete) {
+            user_permissions.push({
+              user_id: userId,
+              resource_id: resourceId,
+              capability: "delete",
+            });
+          }
+        }
+      }
+
+      // Extract group permissions
+      for (const [groupId, permissions] of this.groupPermIndex) {
+        for (const [resourceId, perm] of permissions) {
+          if (perm.can_create) {
+            group_permissions.push({
+              group_id: groupId,
+              resource_id: resourceId,
+              capability: "create",
+            });
+          }
+          if (perm.can_read) {
+            group_permissions.push({
+              group_id: groupId,
+              resource_id: resourceId,
+              capability: "read",
+            });
+          }
+          if (perm.can_update) {
+            group_permissions.push({
+              group_id: groupId,
+              resource_id: resourceId,
+              capability: "update",
+            });
+          }
+          if (perm.can_delete) {
+            group_permissions.push({
+              group_id: groupId,
+              resource_id: resourceId,
+              capability: "delete",
+            });
+          }
+        }
+      }
+
+      return this.jsonResponse({
+        users,
+        groups,
+        resources,
+        member_of,
+        inherits_from,
+        user_permissions,
+        group_permissions,
+      });
+    } catch (error) {
+      console.error(
+        `[GraphStateCSV ${this.orgId}] Data endpoint error:`,
+        error
+      );
+      return this.jsonResponse(
+        { error: error instanceof Error ? error.message : "Unknown error" },
+        500
+      );
+    }
+  }
+
+  /**
+   * Serve raw CSV data for client SDK
+   */
+  private async handleCSVEndpoint(): Promise<Response> {
+    try {
+      const csvData: Record<string, string> = {};
+
+      // Read CSV files from R2
+      const files = [
+        "users",
+        "groups",
+        "resources",
+        "member_of",
+        "inherits_from",
+        "user_permissions",
+        "group_permissions",
+      ];
+
+      for (const file of files) {
+        const key = `${this.orgId}/${file}.csv`;
+        const object = await this.env.GRAPH_STATE.get(key);
+        if (object) {
+          csvData[file] = await object.text();
+        } else {
+          console.warn(
+            `[GraphStateCSV ${this.orgId}] CSV file not found: ${key}`
+          );
+          csvData[file] = "";
+        }
+      }
+
+      return this.jsonResponse(csvData);
+    } catch (error) {
+      console.error(`[GraphStateCSV ${this.orgId}] CSV endpoint error:`, error);
+      return this.jsonResponse(
+        { error: error instanceof Error ? error.message : "Unknown error" },
+        500
+      );
+    }
+  }
+
+  /**
    * Helper to create JSON response
    */
   private jsonResponse(data: any, status: number = 200): Response {
     return new Response(JSON.stringify(data), {
       status,
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
     });
   }
 }

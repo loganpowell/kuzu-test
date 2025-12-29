@@ -1,6 +1,6 @@
-import { MetricsCollector, type TimingResult } from './metrics-collector.ts';
-import { KuzuAuthClient } from '../src/client.ts';
-import { TestData, createScenarios, type TestScenario } from './scenarios.ts';
+import { MetricsCollector, type TimingResult } from "./metrics-collector.ts";
+import { KuzuAuthClient } from "../src/client.ts";
+import { TestData, createScenarios, type TestScenario } from "./scenarios.ts";
 
 /**
  * Benchmark result format
@@ -81,67 +81,54 @@ export class BenchmarkRunner {
   /**
    * Run cold start benchmark
    */
-  async benchmarkColdStart(): Promise<BenchmarkResult['coldStart']> {
-    console.log('🚀 Running cold start benchmark...');
+  async benchmarkColdStart(): Promise<BenchmarkResult["coldStart"]> {
+    console.log("🚀 Running cold start benchmark...");
 
     // Clear IndexedDB to simulate first load
     await this.clearIndexedDB();
 
-    this.metrics.mark('cold-start-total');
-    this.metrics.mark('wasm-download');
-
     // Initialize client (triggers WASM download and compilation)
     this.client = new KuzuAuthClient(this.serverUrl, this.orgId);
-    
-    this.metrics.measure('wasm-download');
-    this.metrics.mark('kuzu-init');
 
     await this.client.initialize();
 
-    const total = this.metrics.measure('cold-start-total');
-    const kuzuInit = this.metrics.measure('kuzu-init');
-
-    // For now, we'll estimate the breakdown
-    // In a real implementation, we'd instrument the client code
-    const wasmDownload = total * 0.3; // ~30% download
-    const wasmCompilation = total * 0.2; // ~20% compilation
-    const dataFetch = total * 0.3; // ~30% data fetch
-    const graphConstruction = total * 0.2; // ~20% graph construction
+    // Get actual measured timings from client
+    const timings = this.client.coldStartTimings!;
 
     return {
-      wasmDownload,
-      wasmCompilation,
-      kuzuInitialization: kuzuInit,
-      dataFetch,
-      graphConstruction,
-      total,
+      wasmDownload: timings.wasmDownload,
+      wasmCompilation: timings.wasmCompilation,
+      kuzuInitialization: timings.kuzuInitialization,
+      dataFetch: timings.dataFetch,
+      graphConstruction: timings.graphConstruction,
+      total: timings.total,
     };
   }
 
   /**
    * Run warm start benchmark
    */
-  async benchmarkWarmStart(): Promise<BenchmarkResult['warmStart']> {
-    console.log('🔥 Running warm start benchmark...');
+  async benchmarkWarmStart(): Promise<BenchmarkResult["warmStart"]> {
+    console.log("🔥 Running warm start benchmark...");
 
     // Close existing client
     if (this.client) {
       await this.client.close();
     }
 
-    this.metrics.mark('warm-start-total');
-    this.metrics.mark('wasm-load');
+    this.metrics.mark("warm-start-total");
+    this.metrics.mark("wasm-load");
 
     // Re-initialize client (should use cache)
     this.client = new KuzuAuthClient(this.serverUrl, this.orgId);
-    
-    this.metrics.measure('wasm-load');
-    this.metrics.mark('indexeddb-load');
+
+    this.metrics.measure("wasm-load");
+    this.metrics.mark("indexeddb-load");
 
     await this.client.initialize();
 
-    const total = this.metrics.measure('warm-start-total');
-    const indexedDBLoad = this.metrics.measure('indexeddb-load');
+    const total = this.metrics.measure("warm-start-total");
+    const indexedDBLoad = this.metrics.measure("indexeddb-load");
 
     return {
       wasmLoad: total * 0.1,
@@ -154,21 +141,25 @@ export class BenchmarkRunner {
   /**
    * Run permission check scenarios
    */
-  async benchmarkPermissionChecks(): Promise<BenchmarkResult['permissionChecks']> {
-    console.log('⚡ Running permission check benchmarks...');
+  async benchmarkPermissionChecks(): Promise<
+    BenchmarkResult["permissionChecks"]
+  > {
+    console.log("⚡ Running permission check benchmarks...");
 
     if (!this.client) {
-      throw new Error('Client not initialized');
+      throw new Error("Client not initialized");
     }
 
     // Load test data
     await this.testData.loadFromServer(this.serverUrl, this.orgId);
 
     const scenarios = createScenarios(this.client, this.testData);
-    const results: BenchmarkResult['permissionChecks'] = [];
+    const results: BenchmarkResult["permissionChecks"] = [];
 
     for (const scenario of scenarios) {
-      console.log(`  Running: ${scenario.name} (${scenario.iterations} iterations)...`);
+      console.log(
+        `  Running: ${scenario.name} (${scenario.iterations} iterations)...`
+      );
 
       const timings: number[] = [];
       let failures = 0;
@@ -179,20 +170,23 @@ export class BenchmarkRunner {
 
       for (let i = 0; i < scenario.iterations; i++) {
         const start = performance.now();
-        
+
         try {
           await scenario.run();
         } catch (error) {
           console.error(`  Failed iteration ${i}:`, error);
           failures++;
         }
-        
+
         const duration = performance.now() - start;
         timings.push(duration);
 
-        // Progress indicator
-        if ((i + 1) % 100 === 0) {
-          process.stdout.write(`\r  Progress: ${i + 1}/${scenario.iterations}`);
+        // Progress indicator (browser-compatible)
+        // For scenarios with <100 iterations, log every iteration
+        // For scenarios with >=100 iterations, log every 100
+        const progressInterval = scenario.iterations < 100 ? 1 : 100;
+        if ((i + 1) % progressInterval === 0) {
+          console.log(`  Progress: ${i + 1}/${scenario.iterations}`);
         }
       }
 
@@ -212,7 +206,11 @@ export class BenchmarkRunner {
         failures,
       });
 
-      console.log(`\n  ✓ ${scenario.name}: ${opsPerSecond.toFixed(0)} ops/sec, p95: ${stats.p95.toFixed(2)}ms`);
+      console.log(
+        `\n  ✓ ${scenario.name}: ${opsPerSecond.toFixed(
+          0
+        )} ops/sec, p95: ${stats.p95.toFixed(2)}ms`
+      );
     }
 
     return results;
@@ -221,14 +219,14 @@ export class BenchmarkRunner {
   /**
    * Measure memory usage
    */
-  async benchmarkMemory(): Promise<BenchmarkResult['memoryUsage']> {
-    console.log('💾 Measuring memory usage...');
+  async benchmarkMemory(): Promise<BenchmarkResult["memoryUsage"]> {
+    console.log("💾 Measuring memory usage...");
 
     const memory = this.metrics.getMemoryUsage();
     const indexedDBSize = await this.getIndexedDBSize();
 
     if (!memory) {
-      console.warn('  Memory API not available (Chrome only)');
+      console.warn("  Memory API not available (Chrome only)");
       return {
         heapUsed: 0,
         heapTotal: 0,
@@ -252,7 +250,7 @@ export class BenchmarkRunner {
    * Run all benchmarks
    */
   async runAll(): Promise<BenchmarkResult> {
-    console.log('🏁 Starting comprehensive benchmark...\n');
+    console.log("🏁 Starting comprehensive benchmark...\n");
 
     const startTime = Date.now();
 
@@ -282,14 +280,14 @@ export class BenchmarkRunner {
           users: this.testData.users.length,
           groups: this.testData.groups.length,
           resources: this.testData.resources.length,
-          relationships: 
+          relationships:
             this.testData.memberOf.size +
             this.testData.inheritsFrom.size +
             this.testData.userPermissions.size +
             this.testData.groupPermissions.size,
         },
-        serviceWorkerEnabled: 'serviceWorker' in navigator,
-        indexedDBEnabled: 'indexedDB' in window,
+        serviceWorkerEnabled: "serviceWorker" in navigator,
+        indexedDBEnabled: "indexedDB" in window,
       },
       coldStart,
       permissionChecks,
@@ -306,13 +304,17 @@ export class BenchmarkRunner {
    * Save results to JSON file
    */
   async saveResults(result: BenchmarkResult): Promise<void> {
-    const timestamp = result.metadata.timestamp.replace(/[:.]/g, '-').slice(0, -5);
+    const timestamp = result.metadata.timestamp
+      .replace(/[:.]/g, "-")
+      .slice(0, -5);
     const filename = `client-benchmark-${timestamp}.json`;
 
     // Create download link
-    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(result, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
@@ -326,7 +328,7 @@ export class BenchmarkRunner {
    */
   private async clearIndexedDB(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.deleteDatabase('kuzu-auth');
+      const request = indexedDB.deleteDatabase("kuzu-auth");
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
@@ -336,7 +338,7 @@ export class BenchmarkRunner {
    * Get IndexedDB storage size
    */
   private async getIndexedDBSize(): Promise<number> {
-    if ('storage' in navigator && 'estimate' in navigator.storage) {
+    if ("storage" in navigator && "estimate" in navigator.storage) {
       const estimate = await navigator.storage.estimate();
       return estimate.usage || 0;
     }

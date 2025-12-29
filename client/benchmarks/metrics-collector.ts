@@ -28,24 +28,24 @@ export class MetricsCollector {
   measure(name: string): number {
     const startMark = `${name}-start`;
     const endMark = `${name}-end`;
-    
+
     performance.mark(endMark);
-    
+
     try {
       const measure = performance.measure(name, startMark, endMark);
       const duration = measure.duration;
-      
+
       // Store the measurement
       if (!this.measurements.has(name)) {
         this.measurements.set(name, []);
       }
       this.measurements.get(name)!.push(duration);
-      
+
       // Cleanup marks
       performance.clearMarks(startMark);
       performance.clearMarks(endMark);
       performance.clearMeasures(name);
-      
+
       return duration;
     } catch (error) {
       console.error(`Failed to measure ${name}:`, error);
@@ -56,7 +56,10 @@ export class MetricsCollector {
   /**
    * Time an async function and record the duration
    */
-  async time<T>(name: string, fn: () => Promise<T>): Promise<{ result: T; duration: number }> {
+  async time<T>(
+    name: string,
+    fn: () => Promise<T>
+  ): Promise<{ result: T; duration: number }> {
     this.mark(name);
     const result = await fn();
     const duration = this.measure(name);
@@ -70,12 +73,12 @@ export class MetricsCollector {
     const start = performance.now();
     const result = fn();
     const duration = performance.now() - start;
-    
+
     if (!this.measurements.has(name)) {
       this.measurements.set(name, []);
     }
     this.measurements.get(name)!.push(duration);
-    
+
     return { result, duration };
   }
 
@@ -100,7 +103,7 @@ export class MetricsCollector {
     const mean = sum / sorted.length;
 
     // Calculate standard deviation
-    const squaredDiffs = sorted.map(x => Math.pow(x - mean, 2));
+    const squaredDiffs = sorted.map((x) => Math.pow(x - mean, 2));
     const variance = squaredDiffs.reduce((a, b) => a + b, 0) / sorted.length;
     const stdDev = Math.sqrt(variance);
 
@@ -150,11 +153,16 @@ export class MetricsCollector {
   /**
    * Get memory usage (Chrome only)
    */
-  getMemoryUsage(): { heapUsed: number; heapTotal: number; heapLimit: number } | null {
+  getMemoryUsage(): {
+    heapUsed: number;
+    heapTotal: number;
+    heapLimit: number;
+  } | null {
     // @ts-ignore - Chrome specific API
     if (performance.memory) {
       // @ts-ignore
-      const { usedJSHeapSize, totalJSHeapSize, jsHeapSizeLimit } = performance.memory;
+      const { usedJSHeapSize, totalJSHeapSize, jsHeapSizeLimit } =
+        performance.memory;
       return {
         heapUsed: usedJSHeapSize,
         heapTotal: totalJSHeapSize,
@@ -167,12 +175,19 @@ export class MetricsCollector {
   /**
    * Get connection info
    */
-  getConnectionInfo(): { effectiveType: string; downlink: number; rtt: number } | null {
+  getConnectionInfo(): {
+    effectiveType: string;
+    downlink: number;
+    rtt: number;
+  } | null {
     // @ts-ignore - NetworkInformation API
-    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const connection =
+      navigator.connection ||
+      navigator.mozConnection ||
+      navigator.webkitConnection;
     if (connection) {
       return {
-        effectiveType: connection.effectiveType || 'unknown',
+        effectiveType: connection.effectiveType || "unknown",
         downlink: connection.downlink || 0,
         rtt: connection.rtt || 0,
       };

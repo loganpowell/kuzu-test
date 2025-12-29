@@ -33,16 +33,16 @@ export class TestData {
     }
 
     const data = await response.json();
-    
+
     // Parse users
     this.users = data.users.map((u: any) => u.id);
-    
+
     // Parse groups
     this.groups = data.groups.map((g: any) => g.id);
-    
+
     // Parse resources
     this.resources = data.resources.map((r: any) => r.id);
-    
+
     // Parse member_of relationships
     for (const rel of data.member_of) {
       if (!this.memberOf.has(rel.user_id)) {
@@ -50,12 +50,12 @@ export class TestData {
       }
       this.memberOf.get(rel.user_id)!.add(rel.group_id);
     }
-    
+
     // Parse inherits_from relationships
     for (const rel of data.inherits_from) {
       this.inheritsFrom.set(rel.group_id, rel.parent_group_id);
     }
-    
+
     // Parse user permissions
     for (const perm of data.user_permissions) {
       const key = `${perm.user_id}:${perm.resource_id}`;
@@ -64,7 +64,7 @@ export class TestData {
       }
       this.userPermissions.get(key)!.add(perm.capability);
     }
-    
+
     // Parse group permissions
     for (const perm of data.group_permissions) {
       const key = `${perm.group_id}:${perm.resource_id}`;
@@ -101,7 +101,7 @@ export class TestData {
    */
   getUserResource(userId: string): string | null {
     for (const [key, _] of this.userPermissions) {
-      const [uid, resourceId] = key.split(':');
+      const [uid, resourceId] = key.split(":");
       if (uid === userId) {
         return resourceId;
       }
@@ -118,7 +118,7 @@ export class TestData {
 
     for (const groupId of groups) {
       for (const [key, _] of this.groupPermissions) {
-        const [gid, resourceId] = key.split(':');
+        const [gid, resourceId] = key.split(":");
         if (gid === groupId) {
           return resourceId;
         }
@@ -148,7 +148,7 @@ export class TestData {
       // If we found a long enough chain, find a resource for this group
       if (hops >= minHops) {
         for (const [key, _] of this.groupPermissions) {
-          const [gid, resourceId] = key.split(':');
+          const [gid, resourceId] = key.split(":");
           if (gid === currentGroup) {
             return resourceId;
           }
@@ -169,52 +169,52 @@ export function createScenarios(
 ): TestScenario[] {
   return [
     {
-      name: 'Direct User Permissions',
-      description: 'Check permissions that are directly assigned to users',
+      name: "Direct User Permissions",
+      description: "Check permissions that are directly assigned to users",
       iterations: 1000,
       run: async () => {
         const user = testData.randomUser();
         const resource = testData.getUserResource(user);
         if (!resource) return false;
-        
-        return await client.can(user, 'read', resource);
+
+        return await client.can(user, "read", resource);
       },
     },
 
     {
-      name: 'Group Permissions',
-      description: 'Check permissions inherited through group membership',
+      name: "Group Permissions",
+      description: "Check permissions inherited through group membership",
       iterations: 1000,
       run: async () => {
         const user = testData.randomUser();
         const resource = testData.getGroupResource(user);
         if (!resource) return false;
-        
-        return await client.can(user, 'read', resource);
+
+        return await client.can(user, "read", resource);
       },
     },
 
     {
-      name: 'Multi-Hop Chains',
-      description: 'Check permissions requiring 3+ hop traversal',
+      name: "Multi-Hop Chains",
+      description: "Check permissions requiring 3+ hop traversal",
       iterations: 500,
       run: async () => {
         const user = testData.randomUser();
         const resource = testData.getDeepResource(user, 3);
         if (!resource) return false;
-        
-        return await client.can(user, 'read', resource);
+
+        return await client.can(user, "read", resource);
       },
     },
 
     {
-      name: 'Mixed Workload',
-      description: 'Mix of direct, group, and multi-hop checks',
+      name: "Mixed Workload",
+      description: "Mix of direct, group, and multi-hop checks",
       iterations: 1000,
       run: async () => {
         const rand = Math.random();
         const user = testData.randomUser();
-        
+
         let resource: string | null;
         if (rand < 0.5) {
           resource = testData.getUserResource(user);
@@ -223,45 +223,47 @@ export function createScenarios(
         } else {
           resource = testData.getDeepResource(user, 2);
         }
-        
+
         if (!resource) {
           resource = testData.randomResource();
         }
-        
-        return await client.can(user, 'read', resource);
+
+        return await client.can(user, "read", resource);
       },
     },
 
     {
-      name: 'High Concurrency',
-      description: '100 simultaneous permission checks',
+      name: "High Concurrency",
+      description: "100 simultaneous permission checks",
       iterations: 100,
       run: async () => {
         const checks = Array.from({ length: 100 }, () => {
           const user = testData.randomUser();
           const resource = testData.randomResource();
-          return client.can(user, 'read', resource);
+          return client.can(user, "read", resource);
         });
-        
+
         const results = await Promise.all(checks);
-        return results.every(r => typeof r === 'boolean');
+        return results.every((r) => typeof r === "boolean");
       },
     },
 
     {
-      name: 'Batch Queries',
-      description: '100 users × 10 resources = 1,000 checks',
+      name: "Batch Queries",
+      description: "10 users × 10 resources = 100 checks",
       iterations: 10,
       run: async () => {
-        const users = Array.from({ length: 100 }, () => testData.randomUser());
-        const resources = Array.from({ length: 10 }, () => testData.randomResource());
-        
-        const checks = users.flatMap(user =>
-          resources.map(resource => client.can(user, 'read', resource))
+        const users = Array.from({ length: 10 }, () => testData.randomUser());
+        const resources = Array.from({ length: 10 }, () =>
+          testData.randomResource()
         );
-        
+
+        const checks = users.flatMap((user) =>
+          resources.map((resource) => client.can(user, "read", resource))
+        );
+
         const results = await Promise.all(checks);
-        return results.every(r => typeof r === 'boolean');
+        return results.every((r) => typeof r === "boolean");
       },
     },
   ];

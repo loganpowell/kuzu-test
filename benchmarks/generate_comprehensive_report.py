@@ -277,12 +277,14 @@ def generate_comprehensive_report(results: Dict):
     # Client-side deployment (if available)
     if "client" in results:
         client_data = results["client"]
-        cold_start = client_data['coldStart']['total']
-        warm_start = client_data.get('warmStart', {}).get('total', 0)
-        
+        cold_start = client_data["coldStart"]["total"]
+        warm_start = client_data.get("warmStart", {}).get("total", 0)
+
         # Calculate average permission check time
-        if client_data['permissionChecks']:
-            avg_check_time = sum(c['results']['mean'] for c in client_data['permissionChecks']) / len(client_data['permissionChecks'])
+        if client_data["permissionChecks"]:
+            avg_check_time = sum(
+                c["results"]["mean"] for c in client_data["permissionChecks"]
+            ) / len(client_data["permissionChecks"])
             report.append(
                 f"- **Client-Side (Browser)**: Zero-latency checks ({avg_check_time:.2f}ms avg), cold start {cold_start:.0f}ms"
             )
@@ -925,15 +927,19 @@ def generate_comprehensive_report(results: Dict):
         report.append("")
         report.append("### KuzuDB WASM in Browser")
         report.append("")
-        
-        env = client_data['metadata']['environment']
+
+        env = client_data["metadata"]["environment"]
         report.append(f"**Browser**: {env['userAgent'][:80]}...")
         report.append(f"**CPU Cores**: {env['hardwareConcurrency']}")
-        report.append(f"**Service Worker**: {'Enabled' if client_data['metadata']['serviceWorkerEnabled'] else 'Disabled'}")
-        report.append(f"**IndexedDB**: {'Enabled' if client_data['metadata']['indexedDBEnabled'] else 'Disabled'}")
+        report.append(
+            f"**Service Worker**: {'Enabled' if client_data['metadata']['serviceWorkerEnabled'] else 'Disabled'}"
+        )
+        report.append(
+            f"**IndexedDB**: {'Enabled' if client_data['metadata']['indexedDBEnabled'] else 'Disabled'}"
+        )
         report.append("")
 
-        ds = client_data['metadata']['dataset']
+        ds = client_data["metadata"]["dataset"]
         report.append("**Dataset:**")
         report.append(f"- Users: {ds['users']:,}")
         report.append(f"- Groups: {ds['groups']:,}")
@@ -943,8 +949,8 @@ def generate_comprehensive_report(results: Dict):
 
         report.append("### Load Performance")
         report.append("")
-        
-        cold = client_data['coldStart']
+
+        cold = client_data["coldStart"]
         report.append("**Cold Start (First Visit):**")
         report.append(f"- WASM Download: {cold['wasmDownload']:.0f}ms")
         report.append(f"- WASM Compilation: {cold['wasmCompilation']:.0f}ms")
@@ -953,8 +959,8 @@ def generate_comprehensive_report(results: Dict):
         report.append(f"- **Total: {cold['total']:.0f}ms ({cold['total']/1000:.1f}s)**")
         report.append("")
 
-        if 'warmStart' in client_data:
-            warm = client_data['warmStart']
+        if "warmStart" in client_data:
+            warm = client_data["warmStart"]
             report.append("**Warm Start (Cached with Service Worker):**")
             report.append(f"- WASM Load: {warm['wasmLoad']:.0f}ms")
             report.append(f"- IndexedDB Load: {warm['indexedDBLoad']:.0f}ms")
@@ -963,10 +969,14 @@ def generate_comprehensive_report(results: Dict):
 
         report.append("### Permission Check Performance")
         report.append("")
-        report.append("| Scenario | Iterations | Mean | P95 | P99 | Ops/sec | Failures |")
-        report.append("|----------|-----------|------|-----|-----|---------|----------|")
-        
-        for check in client_data['permissionChecks']:
+        report.append(
+            "| Scenario | Iterations | Mean | P95 | P99 | Ops/sec | Failures |"
+        )
+        report.append(
+            "|----------|-----------|------|-----|-----|---------|----------|"
+        )
+
+        for check in client_data["permissionChecks"]:
             report.append(
                 f"| {check['scenario']:<29} | {check['iterations']:>6} | "
                 f"{check['results']['mean']:>5.2f}ms | {check['results']['p95']:>5.2f}ms | "
@@ -975,18 +985,24 @@ def generate_comprehensive_report(results: Dict):
             )
 
         report.append("")
-        
+
         # Calculate average
-        avg_ops = sum(c['opsPerSecond'] for c in client_data['permissionChecks']) / len(client_data['permissionChecks'])
-        avg_p95 = sum(c['results']['p95'] for c in client_data['permissionChecks']) / len(client_data['permissionChecks'])
-        
-        report.append(f"**Overall Average**: {avg_ops:.0f} ops/sec, p95: {avg_p95:.2f}ms")
+        avg_ops = sum(c["opsPerSecond"] for c in client_data["permissionChecks"]) / len(
+            client_data["permissionChecks"]
+        )
+        avg_p95 = sum(
+            c["results"]["p95"] for c in client_data["permissionChecks"]
+        ) / len(client_data["permissionChecks"])
+
+        report.append(
+            f"**Overall Average**: {avg_ops:.0f} ops/sec, p95: {avg_p95:.2f}ms"
+        )
         report.append("")
 
         report.append("### Memory Usage")
         report.append("")
-        mem = client_data['memoryUsage']
-        if mem['heapUsed'] > 0:
+        mem = client_data["memoryUsage"]
+        if mem["heapUsed"] > 0:
             report.append(f"- Heap Used: {mem['heapUsed']/(1024*1024):.1f} MB")
             report.append(f"- Heap Total: {mem['heapTotal']/(1024*1024):.1f} MB")
             report.append(f"- Heap Limit: {mem['heapLimit']/(1024*1024):.0f} MB")
@@ -998,9 +1014,13 @@ def generate_comprehensive_report(results: Dict):
         report.append("- Works offline once loaded")
         report.append("- Scales infinitely (computation distributed to clients)")
         report.append("- Dramatically lower server costs")
-        report.append(f"- Fast cold start: {cold['total']/1000:.1f}s (one-time download)")
-        if 'warmStart' in client_data:
-            report.append(f"- Ultra-fast warm start: {warm['total']:.0f}ms (Service Worker)")
+        report.append(
+            f"- Fast cold start: {cold['total']/1000:.1f}s (one-time download)"
+        )
+        if "warmStart" in client_data:
+            report.append(
+                f"- Ultra-fast warm start: {warm['total']:.0f}ms (Service Worker)"
+            )
         report.append("")
 
         report.append("---")

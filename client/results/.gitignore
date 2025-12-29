@@ -1,0 +1,6 @@
+# Ignore all benchmark result files
+*.json
+
+# But keep this directory
+!.gitignore
+!README.md

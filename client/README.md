@@ -26,6 +26,7 @@ This will open your browser to `http://localhost:3000/benchmark.html` where you 
 ## What Gets Measured
 
 ### 1. Cold Start Performance
+
 - WASM bundle download (3.73 MB)
 - WASM compilation time
 - Data fetch from server
@@ -33,6 +34,7 @@ This will open your browser to `http://localhost:3000/benchmark.html` where you 
 - **Target**: < 5 seconds (one-time cost)
 
 ### 2. Permission Check Scenarios
+
 - Direct User Permissions (1,000 checks)
 - Group Permissions (1,000 checks)
 - Multi-Hop Chains (500 checks, 3+ hops)
@@ -41,6 +43,7 @@ This will open your browser to `http://localhost:3000/benchmark.html` where you 
 - Batch Queries (1,000 checks)
 
 ### 3. Memory Usage
+
 - JavaScript heap size
 - IndexedDB storage
 - **Target**: < 100 MB
@@ -48,6 +51,7 @@ This will open your browser to `http://localhost:3000/benchmark.html` where you 
 ## Results
 
 Benchmarks automatically:
+
 - Display results in the UI
 - Save JSON results file (download button)
 - Store in `../results/client-benchmarks/` directory
@@ -92,7 +96,7 @@ client/
   - IndexedDB support
   - Service Worker support (optional, for caching)
   - Performance API
-  
+
 ## Troubleshooting
 
 **CORS Issues**: Make sure your Cloudflare Worker has CORS enabled for the client origin.
@@ -104,6 +108,7 @@ client/
 ## Next Steps
 
 After validating the benchmark:
+
 1. Implement Service Worker for WASM caching
 2. Add real-time WebSocket sync
 3. Optimize IndexedDB schema
