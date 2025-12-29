@@ -8,6 +8,7 @@
 export interface Env {
   GRAPH_STATE_DO: DurableObjectNamespace;
   GRAPH_STATE: R2Bucket;
+  PERMISSIONS_KV: KVNamespace;
   ENVIRONMENT: string;
 }
 
@@ -72,6 +73,29 @@ export default {
         );
       }
 
+      // Phase 2: Network baseline endpoints
+
+      // Ping endpoint for RTT measurement
+      if (path === "/ping") {
+        return jsonResponse({ pong: Date.now() }, { headers: corsHeaders });
+      }
+
+      // Echo endpoint for payload testing
+      if (path === "/echo" && request.method === "POST") {
+        const body = await request.json();
+        return jsonResponse(
+          { echo: body, timestamp: Date.now() },
+          { headers: corsHeaders }
+        );
+      }
+
+      // CSV data endpoint - serves all tables for an org
+      const csvMatch = path.match(/^\/org\/([^/]+)\/csv$/);
+      if (csvMatch && request.method === "GET") {
+        const orgId = `org_${csvMatch[1]}`;
+        return handleGetCSV(env, orgId, corsHeaders);
+      }
+
       // Extract organization ID
       const orgId = extractOrgId(request);
 
@@ -131,5 +155,43 @@ function jsonResponse(data: any, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
     ...init,
     headers,
+  });
+}
+
+/**
+ * Handle CSV data serving (Phase 2)
+ * GET /org/{orgId}/csv
+ */
+async function handleGetCSV(
+  env: Env,
+  orgId: string,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  const tables = [
+    "users",
+    "groups",
+    "resources",
+    "member_of",
+    "inherits_from",
+    "user_permissions",
+    "group_permissions",
+  ];
+
+  const csvData: Record<string, string> = {};
+
+  for (const table of tables) {
+    const key = `${orgId}/${table}.csv`;
+    const obj = await env.GRAPH_STATE.get(key);
+
+    if (obj) {
+      csvData[table] = await obj.text();
+    }
+  }
+
+  return jsonResponse(csvData, {
+    headers: {
+      ...corsHeaders,
+      "Cache-Control": "public, max-age=60",
+    },
   });
 }

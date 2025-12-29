@@ -264,7 +264,13 @@
         </div>
       </div>
 
-      <button id="startBtn">Run Benchmark</button>
+      <button id="startBtn">Run Full Benchmark</button>
+      <button id="networkBtn" style="background: #4299e1; margin-top: 12px">
+        Run Network Baseline Only
+      </button>
+      <button id="mutationBtn" style="background: #48bb78; margin-top: 12px">
+        Run Mutation Roundtrip
+      </button>
       <button id="clearCacheBtn" style="background: #f56565; margin-top: 12px">
         Clear All Caches
       </button>
@@ -443,6 +449,139 @@
           console.error(error);
         } finally {
           startBtn.disabled = false;
+        }
+      });
+
+      // Network baseline benchmark
+      const networkBtn = document.getElementById("networkBtn");
+      networkBtn.addEventListener("click", async () => {
+        const serverUrl = document.getElementById("serverUrl").value;
+
+        if (!serverUrl) {
+          alert("Please enter server URL");
+          return;
+        }
+
+        networkBtn.disabled = true;
+        progress.classList.add("active");
+        log.classList.add("active");
+        results.classList.remove("active");
+        log.innerHTML = "";
+
+        try {
+          addLogEntry("🌐 Running network baseline benchmark...", "info");
+          updateProgress(20, "Measuring network latency...");
+
+          const runner = new BenchmarkRunner(serverUrl, "org_default");
+          const networkResults = await runner.benchmarkNetwork();
+
+          updateProgress(100, "Complete!");
+
+          // Display network results
+          const resultsDiv = document.getElementById("results");
+          resultsDiv.innerHTML = `
+            <div class="result-section">
+              <h3>🌐 Network Baseline</h3>
+              <div class="metric">
+                <span>Round Trip Time (RTT)</span>
+                <strong>${networkResults.rtt.mean.toFixed(
+                  1
+                )}ms (p95: ${networkResults.rtt.p95.toFixed(1)}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Empty GET Request</span>
+                <strong>${networkResults.emptyGet.mean.toFixed(
+                  1
+                )}ms (p95: ${networkResults.emptyGet.p95.toFixed(1)}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Empty POST Request</span>
+                <strong>${networkResults.emptyPost.mean.toFixed(
+                  1
+                )}ms (p95: ${networkResults.emptyPost.p95.toFixed(
+            1
+          )}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>POST with 1KB Payload</span>
+                <strong>${networkResults.postWithPayload.mean.toFixed(
+                  1
+                )}ms (p95: ${networkResults.postWithPayload.p95.toFixed(
+            1
+          )}ms)</strong>
+              </div>
+            </div>
+          `;
+          resultsDiv.classList.add("active");
+
+          addLogEntry("✅ Network benchmark complete!", "success");
+        } catch (error) {
+          addLogEntry(`❌ Error: ${error.message}`, "error");
+          console.error(error);
+        } finally {
+          networkBtn.disabled = false;
+        }
+      });
+
+      // Mutation roundtrip benchmark
+      const mutationBtn = document.getElementById("mutationBtn");
+      mutationBtn.addEventListener("click", async () => {
+        const serverUrl = document.getElementById("serverUrl").value;
+        const orgId = document.getElementById("orgId").value;
+
+        if (!serverUrl || !orgId) {
+          alert("Please enter server URL and organization ID");
+          return;
+        }
+
+        mutationBtn.disabled = true;
+        progress.classList.add("active");
+        log.classList.add("active");
+        results.classList.remove("active");
+        log.innerHTML = "";
+
+        try {
+          addLogEntry("🔄 Running mutation roundtrip benchmark...", "info");
+          updateProgress(20, "Measuring grant/revoke latency...");
+
+          const runner = new BenchmarkRunner(serverUrl, orgId);
+          const mutationResults = await runner.benchmarkMutations();
+
+          updateProgress(100, "Complete!");
+
+          // Display mutation results
+          const resultsDiv = document.getElementById("results");
+          resultsDiv.innerHTML = `
+            <div class="result-section">
+              <h3>🔄 Mutation Roundtrip Performance</h3>
+              <div class="metric">
+                <span>Grant Permission (with R2 write)</span>
+                <strong>${mutationResults.grant.mean.toFixed(
+                  1
+                )}ms (p95: ${mutationResults.grant.p95.toFixed(1)}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Revoke Permission (with R2 write)</span>
+                <strong>${mutationResults.revoke.mean.toFixed(
+                  1
+                )}ms (p95: ${mutationResults.revoke.p95.toFixed(1)}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Target</span>
+                <strong>${
+                  mutationResults.grant.p95 < 100 ? "✅" : "⚠️"
+                } <100ms p95</strong>
+              </div>
+            </div>
+          `;
+          resultsDiv.classList.add("active");
+
+          addLogEntry("✅ Mutation benchmark complete!", "success");
+        } catch (error) {
+          addLogEntry(`❌ Error: ${error.message}`, "error");
+          console.error(error);
+        } finally {
+          mutationBtn.disabled = false;
         }
       });
 

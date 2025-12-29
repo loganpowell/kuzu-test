@@ -31,10 +31,15 @@ new_sqlite_classes = ["GraphStateKuzu"]
 name = "GRAPH_STATE_DO"
 class_name = "GraphStateCSV"
 
-# R2 bucket binding
+# R2 bucket binding (optional - for backups)
 [[r2_buckets]]
 binding = "GRAPH_STATE"
 bucket_name = "kuzu-auth-dev-graph-state"
+
+# KV namespace binding (primary storage)
+[[kv_namespaces]]
+binding = "PERMISSIONS_KV"
+id = "a49823ea40c44afc9cd0405f77d0fb7c"
 
 # Environment variables
 [vars]

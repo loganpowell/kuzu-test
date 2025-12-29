@@ -8,6 +8,7 @@
 
 interface Env {
   GRAPH_STATE: R2Bucket;
+  PERMISSIONS_KV: KVNamespace;
 }
 
 interface Permission {
@@ -54,6 +55,8 @@ export class GraphStateCSV {
         return await this.handleStats();
       } else if (path === "/grant" || path.endsWith("/grant")) {
         return await this.handleGrant(request);
+      } else if (path === "/revoke" || path.endsWith("/revoke")) {
+        return await this.handleRevoke(request);
       } else if (path === "/data" || path.endsWith("/data")) {
         return await this.handleDataEndpoint();
       } else if (path === "/csv" || path.endsWith("/csv")) {
@@ -316,10 +319,11 @@ export class GraphStateCSV {
   }
 
   /**
-   * Grant permission (simplified - just adds to index)
+   * Grant permission (stores in memory + DO SQLite + KV)
    */
   private async handleGrant(request: Request): Promise<Response> {
     try {
+      const startTime = Date.now();
       const body = await request.json<any>();
       const { user, permission, resource } = body;
 
@@ -327,6 +331,8 @@ export class GraphStateCSV {
         return this.jsonResponse({ error: "Missing parameters" }, 400);
       }
 
+      // 1. Update in-memory index (fast)
+      const memoryStartTime = Date.now();
       if (!this.userPermIndex.has(user)) {
         this.userPermIndex.set(user, new Map());
       }
@@ -341,8 +347,34 @@ export class GraphStateCSV {
       };
 
       this.userPermIndex.get(user)!.set(resource, perm);
+      const memoryTime = Date.now() - memoryStartTime;
 
-      return this.jsonResponse({ success: true, user, permission, resource });
+      // 2. Write to DO SQLite (durable, fast - survives while DO is active)
+      const sqliteStartTime = Date.now();
+      const sqliteKey = `perm:${user}:${resource}`;
+      await this.state.storage.put(sqliteKey, perm);
+      const sqliteTime = Date.now() - sqliteStartTime;
+
+      // 3. Write to KV namespace (async, non-blocking - durable backup)
+      const kvKey = `${this.orgId}:perm:${user}:${resource}`;
+      this.state.waitUntil(
+        this.env.PERMISSIONS_KV.put(kvKey, JSON.stringify(perm))
+      );
+
+      const totalTime = Date.now() - startTime;
+
+      return this.jsonResponse({
+        success: true,
+        user,
+        permission,
+        resource,
+        timing: {
+          memoryMs: memoryTime,
+          sqliteMs: sqliteTime,
+          kvMs: 0, // Async - not blocking response
+          totalMs: totalTime,
+        },
+      });
     } catch (error) {
       console.error(`[GraphStateCSV ${this.orgId}] Grant error:`, error);
       return this.jsonResponse(
@@ -353,6 +385,116 @@ export class GraphStateCSV {
         500
       );
     }
+  }
+
+  /**
+   * Revoke permission (removes from memory + DO SQLite + KV)
+   */
+  private async handleRevoke(request: Request): Promise<Response> {
+    try {
+      const startTime = Date.now();
+      const body = await request.json<any>();
+      const { user, permission, resource } = body;
+
+      if (!user || !resource) {
+        return this.jsonResponse({ error: "Missing parameters" }, 400);
+      }
+
+      // 1. Remove from in-memory index
+      const memoryStartTime = Date.now();
+      const userPerms = this.userPermIndex.get(user);
+      if (userPerms) {
+        userPerms.delete(resource);
+      }
+      const memoryTime = Date.now() - memoryStartTime;
+
+      // 2. Delete from DO SQLite
+      const sqliteStartTime = Date.now();
+      const sqliteKey = `perm:${user}:${resource}`;
+      await this.state.storage.delete(sqliteKey);
+      const sqliteTime = Date.now() - sqliteStartTime;
+
+      // 3. Delete from KV namespace (async, non-blocking)
+      const kvKey = `${this.orgId}:perm:${user}:${resource}`;
+      this.state.waitUntil(this.env.PERMISSIONS_KV.delete(kvKey));
+
+      const totalTime = Date.now() - startTime;
+
+      return this.jsonResponse({
+        success: true,
+        user,
+        resource,
+        timing: {
+          memoryMs: memoryTime,
+          sqliteMs: sqliteTime,
+          kvMs: 0, // Async - not blocking response
+          totalMs: totalTime,
+        },
+      });
+    } catch (error) {
+      console.error(`[GraphStateCSV ${this.orgId}] Revoke error:`, error);
+      return this.jsonResponse(
+        {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+        500
+      );
+    }
+  }
+
+  /**
+   * Write permission to R2 (append to CSV)
+   */
+  private async writePermissionToR2(
+    user: string,
+    resource: string,
+    perm: Permission
+  ): Promise<void> {
+    const key = `${this.orgId}/user_permissions.csv`;
+    const existing = await this.env.GRAPH_STATE.get(key);
+
+    // CSV format: user,resource,can_create,can_read,can_update,can_delete,granted_at,granted_by
+    const csvRow = `${user},${resource},${perm.can_create},${perm.can_read},${perm.can_update},${perm.can_delete},${perm.granted_at},${perm.granted_by}\n`;
+
+    if (existing) {
+      const existingText = await existing.text();
+      await this.env.GRAPH_STATE.put(key, existingText + csvRow);
+    } else {
+      // Create with header
+      const header =
+        "user,resource,can_create,can_read,can_update,can_delete,granted_at,granted_by\n";
+      await this.env.GRAPH_STATE.put(key, header + csvRow);
+    }
+  }
+
+  /**
+   * Remove permission from R2 (filter and rewrite)
+   */
+  private async removePermissionFromR2(
+    user: string,
+    resource: string
+  ): Promise<void> {
+    const key = `${this.orgId}/user_permissions.csv`;
+    const existing = await this.env.GRAPH_STATE.get(key);
+
+    if (!existing) return;
+
+    const text = await existing.text();
+    const lines = text.split("\n");
+    const header = lines[0];
+
+    // Filter out the permission being revoked
+    const filtered = lines
+      .slice(1)
+      .filter((line) => {
+        if (!line.trim()) return false;
+        const [lineUser, lineResource] = line.split(",");
+        return !(lineUser === user && lineResource === resource);
+      })
+      .join("\n");
+
+    await this.env.GRAPH_STATE.put(key, header + "\n" + filtered + "\n");
   }
 
   /**

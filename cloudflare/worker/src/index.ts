@@ -48,6 +48,28 @@ export default {
         );
       }
 
+      // Ping endpoint for RTT measurement (Phase 2)
+      if (path === "/ping") {
+        return jsonResponse({ pong: Date.now() }, { headers: corsHeaders });
+      }
+
+      // Echo endpoint for payload testing (Phase 2)
+      if (path === "/echo" && request.method === "POST") {
+        const body = await request.json();
+        return jsonResponse(
+          { echo: body, timestamp: Date.now() },
+          { headers: corsHeaders }
+        );
+      }
+
+      // Serve CSV data for an organization (Phase 2)
+      // Pattern: /org/{orgId}/csv
+      const csvMatch = path.match(/^\/org\/([^/]+)\/csv$/);
+      if (csvMatch && request.method === "GET") {
+        const orgId = csvMatch[1];
+        return handleGetCSV(env, orgId, corsHeaders);
+      }
+
       // Get Durable Object instance (singleton for the entire graph)
       const id = env.GRAPH_STATE_DO.idFromName("primary");
       const stub = env.GRAPH_STATE_DO.get(id);
@@ -263,6 +285,44 @@ async function handleBulk(
 
   const result = await response.json();
   return jsonResponse(result, { headers: corsHeaders });
+}
+
+/**
+ * Handle CSV data serving (Phase 2)
+ * GET /org/{orgId}/csv
+ */
+async function handleGetCSV(
+  env: Env,
+  orgId: string,
+  corsHeaders: Record<string, string>
+): Promise<Response> {
+  const tables = [
+    "users",
+    "groups",
+    "resources",
+    "member_of",
+    "inherits_from",
+    "user_permissions",
+    "group_permissions",
+  ];
+
+  const csvData: Record<string, string> = {};
+
+  for (const table of tables) {
+    const key = `${orgId}/${table}.csv`;
+    const obj = await env.GRAPH_STATE.get(key);
+
+    if (obj) {
+      csvData[table] = await obj.text();
+    }
+  }
+
+  return jsonResponse(csvData, {
+    headers: {
+      ...corsHeaders,
+      "Cache-Control": "public, max-age=60",
+    },
+  });
 }
 
 /**

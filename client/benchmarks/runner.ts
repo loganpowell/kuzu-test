@@ -1,6 +1,10 @@
 import { MetricsCollector, type TimingResult } from "./metrics-collector.ts";
 import { KuzuAuthClient } from "../src/client.ts";
 import { TestData, createScenarios, type TestScenario } from "./scenarios.ts";
+import { NetworkBenchmark } from "./network.ts";
+import type { NetworkMetrics } from "./network.ts";
+import { MutationBenchmark } from "./mutation.ts";
+import type { MutationMetrics } from "./mutation.ts";
 
 /**
  * Benchmark result format
@@ -244,6 +248,62 @@ export class BenchmarkRunner {
       heapLimit: memory.heapLimit,
       indexedDBSize,
     };
+  }
+
+  /**
+   * Run network baseline benchmark (Phase 2)
+   */
+  async benchmarkNetwork(): Promise<NetworkMetrics> {
+    console.log("🌐 Running network baseline benchmark...");
+
+    const networkBench = new NetworkBenchmark(this.serverUrl);
+    const results = await networkBench.runFullSuite();
+
+    console.log(
+      `  ✓ RTT: ${results.rtt.mean.toFixed(
+        1
+      )}ms (p95: ${results.rtt.p95.toFixed(1)}ms)`
+    );
+    console.log(
+      `  ✓ Empty GET: ${results.emptyGet.mean.toFixed(
+        1
+      )}ms (p95: ${results.emptyGet.p95.toFixed(1)}ms)`
+    );
+    console.log(
+      `  ✓ Empty POST: ${results.emptyPost.mean.toFixed(
+        1
+      )}ms (p95: ${results.emptyPost.p95.toFixed(1)}ms)`
+    );
+    console.log(
+      `  ✓ POST 1KB: ${results.postWithPayload.mean.toFixed(
+        1
+      )}ms (p95: ${results.postWithPayload.p95.toFixed(1)}ms)`
+    );
+
+    return results;
+  }
+
+  /**
+   * Run mutation benchmark (Phase 2C)
+   */
+  async benchmarkMutations(): Promise<MutationMetrics> {
+    console.log("🔄 Running mutation roundtrip benchmark...");
+
+    const mutationBench = new MutationBenchmark(this.serverUrl, this.orgId);
+    const results = await mutationBench.runFullSuite();
+
+    console.log(
+      `  ✓ Grant: ${results.grant.mean.toFixed(
+        1
+      )}ms (p95: ${results.grant.p95.toFixed(1)}ms)`
+    );
+    console.log(
+      `  ✓ Revoke: ${results.revoke.mean.toFixed(
+        1
+      )}ms (p95: ${results.revoke.p95.toFixed(1)}ms)`
+    );
+
+    return results;
   }
 
   /**
