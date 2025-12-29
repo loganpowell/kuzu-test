@@ -1,0 +1,18 @@
+{
+  "name": "@kuzu-auth/tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Load and stress tests for Kuzu Auth on Cloudflare",
+  "scripts": {
+    "stress-test": "tsx stress-test.ts",
+    "benchmark": "tsx benchmark.ts",
+    "memory-test": "tsx memory-test.ts",
+    "concurrent-test": "tsx concurrent-test.ts"
+  },
+  "devDependencies": {
+    "@kuzu-auth/sdk": "workspace:*",
+    "@types/node": "^20.10.6",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

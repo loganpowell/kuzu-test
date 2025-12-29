@@ -1,0 +1,12 @@
+{
+  "name": "@kuzu-auth/root",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kuzu Auth - Zanzibar-inspired authorization on Cloudflare",
+  "scripts": {
+    "build": "pnpm -r build",
+    "deploy:infra": "cd pulumi && pulumi up",
+    "deploy:worker": "cd worker && npm run deploy",
+    "test": "cd tests && npm run stress-test"
+  }
+}

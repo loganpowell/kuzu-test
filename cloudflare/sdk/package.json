@@ -1,0 +1,29 @@
+{
+  "name": "@kuzu-auth/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Kuzu Auth - Zanzibar-inspired authorization on Cloudflare",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "vitest"
+  },
+  "keywords": [
+    "authorization",
+    "zanzibar",
+    "cloudflare",
+    "kuzu",
+    "permissions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "tsup": "^8.0.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  }
+}

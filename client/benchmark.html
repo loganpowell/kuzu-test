@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KuzuAuth Client Benchmark</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 900px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #1a202c;
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #718096;
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+
+    .config {
+      background: #f7fafc;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .config-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .config-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .input-group {
+      flex: 1;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #4a5568;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .progress {
+      display: none;
+      margin-top: 24px;
+    }
+
+    .progress.active {
+      display: block;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .progress-text {
+      font-size: 14px;
+      color: #4a5568;
+      text-align: center;
+    }
+
+    .log {
+      display: none;
+      margin-top: 24px;
+      background: #1a202c;
+      border-radius: 8px;
+      padding: 20px;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+
+    .log.active {
+      display: block;
+    }
+
+    .log-entry {
+      color: #a0aec0;
+      margin-bottom: 4px;
+    }
+
+    .log-entry.success {
+      color: #48bb78;
+    }
+
+    .log-entry.error {
+      color: #f56565;
+    }
+
+    .log-entry.info {
+      color: #4299e1;
+    }
+
+    .results {
+      display: none;
+      margin-top: 24px;
+    }
+
+    .results.active {
+      display: block;
+    }
+
+    .result-section {
+      background: #f7fafc;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .result-section h3 {
+      color: #1a202c;
+      font-size: 18px;
+      margin-bottom: 16px;
+    }
+
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .metric:last-child {
+      border-bottom: none;
+    }
+
+    .metric-label {
+      color: #4a5568;
+      font-size: 14px;
+    }
+
+    .metric-value {
+      color: #1a202c;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .download-btn {
+      margin-top: 16px;
+      background: #48bb78;
+    }
+
+    .download-btn:hover {
+      box-shadow: 0 10px 20px rgba(72, 187, 120, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 KuzuAuth Client Benchmark</h1>
+    <p class="subtitle">Measure client-side authorization performance with KuzuDB WASM</p>
+
+    <div class="config">
+      <div class="config-row">
+        <div class="input-group">
+          <label for="serverUrl">Server URL</label>
+          <input 
+            type="text" 
+            id="serverUrl" 
+            value="https://kuzu-auth-dev-worker.logan-607.workers.dev"
+            placeholder="https://api.example.com"
+          >
+        </div>
+      </div>
+      <div class="config-row">
+        <div class="input-group">
+          <label for="orgId">Organization ID</label>
+          <input 
+            type="text" 
+            id="orgId" 
+            value="org_default"
+            placeholder="org_default"
+          >
+        </div>
+      </div>
+    </div>
+
+    <button id="startBtn">Run Benchmark</button>
+
+    <div class="progress" id="progress">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-text" id="progressText">Initializing...</div>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <div class="results" id="results">
+      <div class="result-section">
+        <h3>⚡ Cold Start Performance</h3>
+        <div class="metric">
+          <span class="metric-label">Total Time</span>
+          <span class="metric-value" id="coldStartTotal">-</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">WASM Download</span>
+          <span class="metric-value" id="wasmDownload">-</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Data Fetch</span>
+          <span class="metric-value" id="dataFetch">-</span>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <h3>🎯 Permission Checks</h3>
+        <div id="permissionResults"></div>
+      </div>
+
+      <div class="result-section">
+        <h3>💾 Memory Usage</h3>
+        <div class="metric">
+          <span class="metric-label">Heap Used</span>
+          <span class="metric-value" id="heapUsed">-</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">IndexedDB Size</span>
+          <span class="metric-value" id="indexedDBSize">-</span>
+        </div>
+      </div>
+
+      <button class="download-btn" id="downloadBtn">📥 Download Results JSON</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { BenchmarkRunner } from './benchmarks/runner.ts';
+
+    const startBtn = document.getElementById('startBtn');
+    const progress = document.getElementById('progress');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const log = document.getElementById('log');
+    const results = document.getElementById('results');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let benchmarkResult = null;
+
+    // Hijack console.log to display in UI
+    const originalLog = console.log;
+    console.log = (...args) => {
+      originalLog(...args);
+      addLogEntry(args.join(' '), 'info');
+    };
+
+    const originalError = console.error;
+    console.error = (...args) => {
+      originalError(...args);
+      addLogEntry(args.join(' '), 'error');
+    };
+
+    function addLogEntry(message, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = message;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function updateProgress(percent, text) {
+      progressFill.style.width = `${percent}%`;
+      progressText.textContent = text;
+    }
+
+    function formatDuration(ms) {
+      if (ms >= 1000) {
+        return `${(ms / 1000).toFixed(2)}s`;
+      }
+      return `${ms.toFixed(2)}ms`;
+    }
+
+    function formatBytes(bytes) {
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function displayResults(result) {
+      benchmarkResult = result;
+
+      // Cold start
+      document.getElementById('coldStartTotal').textContent = formatDuration(result.coldStart.total);
+      document.getElementById('wasmDownload').textContent = formatDuration(result.coldStart.wasmDownload);
+      document.getElementById('dataFetch').textContent = formatDuration(result.coldStart.dataFetch);
+
+      // Permission checks
+      const permissionResults = document.getElementById('permissionResults');
+      permissionResults.innerHTML = '';
+      
+      for (const check of result.permissionChecks) {
+        permissionResults.innerHTML += `
+          <div class="metric">
+            <span class="metric-label">${check.scenario}</span>
+            <span class="metric-value">${check.opsPerSecond.toFixed(0)} ops/sec (p95: ${check.results.p95.toFixed(2)}ms)</span>
+          </div>
+        `;
+      }
+
+      // Memory
+      document.getElementById('heapUsed').textContent = formatBytes(result.memoryUsage.heapUsed);
+      document.getElementById('indexedDBSize').textContent = formatBytes(result.memoryUsage.indexedDBSize);
+
+      results.classList.add('active');
+    }
+
+    startBtn.addEventListener('click', async () => {
+      const serverUrl = document.getElementById('serverUrl').value;
+      const orgId = document.getElementById('orgId').value;
+
+      if (!serverUrl || !orgId) {
+        alert('Please enter server URL and organization ID');
+        return;
+      }
+
+      startBtn.disabled = true;
+      progress.classList.add('active');
+      log.classList.add('active');
+      results.classList.remove('active');
+      log.innerHTML = '';
+
+      try {
+        const runner = new BenchmarkRunner(serverUrl, orgId);
+
+        updateProgress(10, 'Running cold start benchmark...');
+        const result = await runner.runAll();
+
+        updateProgress(100, 'Complete!');
+        displayResults(result);
+
+        addLogEntry('✅ Benchmark complete!', 'success');
+      } catch (error) {
+        addLogEntry(`❌ Error: ${error.message}`, 'error');
+        console.error(error);
+      } finally {
+        startBtn.disabled = false;
+      }
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (benchmarkResult) {
+        const timestamp = benchmarkResult.metadata.timestamp.replace(/[:.]/g, '-').slice(0, -5);
+        const filename = `client-benchmark-${timestamp}.json`;
+        
+        const blob = new Blob([JSON.stringify(benchmarkResult, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    });
+  </script>
+</body>
+</html>

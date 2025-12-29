@@ -1,0 +1,5 @@
+packages:
+  - "pulumi"
+  - "worker"
+  - "sdk"
+  - "tests"

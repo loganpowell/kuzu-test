@@ -1,0 +1,22 @@
+{
+  "name": "@kuzu-auth/infrastructure",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pulumi infrastructure for Cloudflare Zanzibar-inspired authorization",
+  "main": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "pulumi preview",
+    "deploy": "pulumi up",
+    "destroy": "pulumi destroy",
+    "refresh": "pulumi refresh"
+  },
+  "dependencies": {
+    "@pulumi/cloudflare": "^5.37.1",
+    "@pulumi/pulumi": "^3.101.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  }
+}

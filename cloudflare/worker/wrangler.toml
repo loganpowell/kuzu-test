@@ -1,0 +1,47 @@
+name = "kuzu-auth-dev-worker"
+main = "src/index-kuzu.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Durable Object migrations
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GraphState"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["GraphStateKuzu"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["GraphStateCSV"]
+
+[[migrations]]
+tag = "v4"
+deleted_classes = ["GraphStateKuzu"]
+
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["GraphStateKuzu"]
+
+# No v6 migration needed - just switch binding
+
+# Durable Object bindings
+[[durable_objects.bindings]]
+name = "GRAPH_STATE_DO"
+class_name = "GraphStateCSV"
+
+# R2 bucket binding
+[[r2_buckets]]
+binding = "GRAPH_STATE"
+bucket_name = "kuzu-auth-dev-graph-state"
+
+# Environment variables
+[vars]
+ENVIRONMENT = "dev"
+
+# Development settings
+[dev]
+ip = "127.0.0.1"
+port = 8787
+local_protocol = "http"
