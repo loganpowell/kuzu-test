@@ -34,6 +34,7 @@ export class KuzuAuthClient {
   private serverUrl: string;
   private orgId: string;
   private wsConnection: WebSocket | null = null;
+  private useMultiThreadedCDN: boolean;
 
   // Cold start timing metrics
   public coldStartTimings: {
@@ -45,18 +46,24 @@ export class KuzuAuthClient {
     total: number;
   } | null = null;
 
-  constructor(serverUrl: string, orgId: string) {
+  constructor(
+    serverUrl: string,
+    orgId: string,
+    options: { useMultiThreadedCDN?: boolean } = {}
+  ) {
     this.serverUrl = serverUrl;
     this.orgId = orgId;
-
-    // Register service worker for caching
-    this.registerServiceWorker();
+    this.useMultiThreadedCDN = options.useMultiThreadedCDN ?? false;
   }
 
   /**
-   * Register service worker for caching CSV data
+   * Initialize the client
    */
-  private async registerServiceWorker(): Promise<void> {
+  async initialize(): Promise<void> {
+    const startTotal = performance.now();
+    console.log("[KuzuAuthClient] Initializing...");
+
+    // Register Service Worker for caching
     if ("serviceWorker" in navigator) {
       try {
         const registration = await navigator.serviceWorker.register("/sw.js");
@@ -71,14 +78,6 @@ export class KuzuAuthClient {
         );
       }
     }
-  }
-
-  /**
-   * Initialize the client
-   */
-  async initialize(): Promise<void> {
-    const startTotal = performance.now();
-    console.log("[KuzuAuthClient] Initializing...");
 
     // Open IndexedDB
     this.idb = await openDB<GraphDB>("kuzu-auth", 1, {
@@ -90,29 +89,52 @@ export class KuzuAuthClient {
 
     // Load KuzuDB WASM - default export is the initialized module object
     const startWasm = performance.now();
-    const kuzuModule = await import("kuzu-wasm");
+
+    console.log(
+      "[KuzuAuthClient] Loading multi-threaded WASM from CDN (cached)..."
+    );
+    const kuzu_wasm = await import(
+      "https://cdn.jsdelivr.net/npm/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js"
+    );
+    const kuzu = await kuzu_wasm.default();
+    window.kuzu = kuzu;
+
     const wasmDownload = performance.now() - startWasm;
 
     const startCompilation = performance.now();
-    const kuzu = kuzuModule.default;
+
+    // Check for multi-threading support
+    console.log(
+      "[KuzuAuthClient] SharedArrayBuffer available:",
+      typeof SharedArrayBuffer !== "undefined"
+    );
+    console.log(
+      "[KuzuAuthClient] Hardware concurrency:",
+      navigator.hardwareConcurrency
+    );
 
     // Store reference to Emscripten FS module
     this.fs = (kuzu as any).FS;
 
     // Create in-memory database with large buffer pool (2 GB)
-    // Disable compression during initial load for better memory usage
+    // Enable multi-threading for better performance
     // Parameters: (path, bufferPoolSize, maxNumThreads, enableCompression, readOnly, autoCheckpoint, checkpointThreshold)
     const bufferPoolSize = 2 * 1024 * 1024 * 1024; // 2 GB in bytes
-    const maxNumThreads = 0; // Use default
+    const maxNumThreads = navigator.hardwareConcurrency || 8; // Use all available cores
     const enableCompression = false; // Disable compression for better memory usage
-    const startKuzu = performance.now();
-    this.db = new kuzu.Database(
-      "",
-      bufferPoolSize,
+
+    console.log(
+      "[KuzuAuthClient] Creating database with",
       maxNumThreads,
-      enableCompression
+      "threads"
     );
-    this.connection = new kuzu.Connection(this.db);
+    const startKuzu = performance.now();
+
+    // CDN version uses async factory functions
+    this.db = await kuzu.Database();
+    this.connection = await kuzu.Connection(this.db);
+
+    console.log("[KuzuAuthClient] Database created");
     const kuzuInitialization = performance.now() - startKuzu;
     const wasmCompilation =
       performance.now() - startCompilation - kuzuInitialization;
@@ -130,12 +152,44 @@ export class KuzuAuthClient {
     };
 
     // Load graph data (will update dataFetch and graphConstruction)
+
     await this.loadGraphData();
 
     const total = performance.now() - startTotal;
     this.coldStartTimings.total = total;
 
     console.log("[KuzuAuthClient] Ready");
+  }
+
+  /**
+   * Execute a query with parameters
+   * CDN version only supports execute() without parameters,
+   * so we manually substitute parameters in the query string
+   */
+  private async executeQuery(
+    sql: string,
+    params?: Record<string, any>
+  ): Promise<any> {
+    let finalSql = sql;
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        const paramPlaceholder = `$${key}`;
+        // Escape string values with single quotes
+        const paramValue = typeof value === "string" ? `'${value}'` : value;
+        finalSql = finalSql.replace(
+          new RegExp(`\\${paramPlaceholder}`, "g"),
+          String(paramValue)
+        );
+      }
+    }
+    const result = await this.connection.execute(finalSql);
+
+    // Wrap result to provide consistent API for compatibility
+    return {
+      getAllObjects: async () => result || [],
+      getAll: () => result || [],
+      close: async () => {}, // CDN doesn't need explicit close
+    };
   }
 
   /**
@@ -252,32 +306,32 @@ export class KuzuAuthClient {
    */
   private async createSchema(): Promise<void> {
     // Create node tables
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE NODE TABLE User(id STRING, PRIMARY KEY(id))
     `);
 
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE NODE TABLE UserGroup(id STRING, PRIMARY KEY(id))
     `);
 
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE NODE TABLE Resource(id STRING, name STRING, PRIMARY KEY(id))
     `);
 
     // Create relationship tables
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE REL TABLE MEMBER_OF(FROM User TO UserGroup)
     `);
 
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE REL TABLE INHERITS_FROM(FROM UserGroup TO UserGroup)
     `);
 
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE REL TABLE USER_PERMISSION(FROM User TO Resource, capability STRING)
     `);
 
-    await this.connection.query(`
+    await this.executeQuery(`
       CREATE REL TABLE GROUP_PERMISSION(FROM UserGroup TO Resource, capability STRING)
     `);
   }
@@ -310,16 +364,20 @@ export class KuzuAuthClient {
     const tableOrder = [...nodeTableOrder, ...relTableOrder];
 
     for (const table of tableOrder) {
+      const tableStart = performance.now();
       const content = csvData.get(table);
       if (!content) continue;
 
+      const parseStart = performance.now();
       const allRows = this.parseCSV(content);
       const validRows = allRows.filter(
         (row) => row.length > 0 && row[0] && row[0].trim() !== ""
       );
       let rows = validRows.slice(0, MAX_ROWS_PER_TABLE);
+      const parseTime = performance.now() - parseStart;
 
       // Filter relationship rows to only include references to loaded nodes
+      const filterStart = performance.now();
       if (table === "member_of") {
         rows = rows.filter(
           (row) => loadedUserIds.has(row[0]) && loadedGroupIds.has(row[1])
@@ -337,80 +395,166 @@ export class KuzuAuthClient {
           (row) => loadedGroupIds.has(row[0]) && loadedResourceIds.has(row[1])
         );
       }
+      const filterTime = performance.now() - filterStart;
 
       console.log(
-        `[KuzuAuthClient] Loading ${rows.length}/${validRows.length} rows for ${table}`
+        `[KuzuAuthClient] Loading ${rows.length}/${
+          validRows.length
+        } rows for ${table} (parse: ${parseTime.toFixed(
+          1
+        )}ms, filter: ${filterTime.toFixed(1)}ms)`
       );
 
       // Write CSV data to virtual filesystem and use COPY FROM
       const filename = `/${table}.csv`;
 
+      const writeStart = performance.now();
       if (table === "users") {
         // Single column: id
         rows.forEach((row) => loadedUserIds.add(row[0]));
         const csvContent = rows.map((row) => row[0]).join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
-          `COPY User FROM '${filename}' (HEADER=false)`
-        );
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(`COPY User FROM '${filename}' (HEADER=false)`);
+        const copyTime = performance.now() - copyStart;
+
         await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
       } else if (table === "groups") {
         // Single column: id
         rows.forEach((row) => loadedGroupIds.add(row[0]));
         const csvContent = rows.map((row) => row[0]).join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(
           `COPY UserGroup FROM '${filename}' (HEADER=false)`
         );
+        const copyTime = performance.now() - copyStart;
+
         await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
       } else if (table === "resources") {
         // Two columns: id, name
         rows.forEach((row) => loadedResourceIds.add(row[0]));
         const csvContent = rows.map((row) => `${row[0]},${row[1]}`).join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(
           `COPY Resource FROM '${filename}' (HEADER=false)`
         );
+        const copyTime = performance.now() - copyStart;
+
         await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
       } else if (table === "member_of") {
         // Two columns: user_id, group_id
         const csvContent = rows.map((row) => `${row[0]},${row[1]}`).join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(
           `COPY MEMBER_OF FROM '${filename}' (HEADER=false)`
         );
+        const copyTime = performance.now() - copyStart;
+
         await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
       } else if (table === "inherits_from") {
         // Two columns: from_group_id, to_group_id
         const csvContent = rows.map((row) => `${row[0]},${row[1]}`).join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(
           `COPY INHERITS_FROM FROM '${filename}' (HEADER=false)`
         );
+        const copyTime = performance.now() - copyStart;
+
         await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
       } else if (table === "user_permissions") {
         // Three columns: user_id, resource_id, capability
         const csvContent = rows
           .map((row) => `${row[0]},${row[1]},${row[2]}`)
           .join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(
           `COPY USER_PERMISSION FROM '${filename}' (HEADER=false)`
         );
+        const copyTime = performance.now() - copyStart;
+
         await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
       } else if (table === "group_permissions") {
         // Three columns: group_id, resource_id, capability
         const csvContent = rows
           .map((row) => `${row[0]},${row[1]},${row[2]}`)
           .join("\n");
         await FS.writeFile(filename, csvContent);
-        await this.connection.query(
+        const writeTime = performance.now() - writeStart;
+
+        const copyStart = performance.now();
+        await this.executeQuery(
           `COPY GROUP_PERMISSION FROM '${filename}' (HEADER=false)`
         );
-        await FS.unlink(filename);
-      }
+        const copyTime = performance.now() - copyStart;
 
-      console.log(`[KuzuAuthClient] Completed loading ${table}`);
+        await FS.unlink(filename);
+        console.log(
+          `[KuzuAuthClient] Completed loading ${table} (write: ${writeTime.toFixed(
+            1
+          )}ms, copy: ${copyTime.toFixed(1)}ms, total: ${(
+            performance.now() - tableStart
+          ).toFixed(1)}ms)`
+        );
+      }
     }
   }
 
@@ -432,7 +576,7 @@ export class KuzuAuthClient {
       RETURN COUNT(*) > 0 AS has_permission
     `;
 
-    const result = await this.connection.query(query, {
+    const result = await this.executeQuery(query, {
       userId,
       capability,
       resourceId,
@@ -463,7 +607,7 @@ export class KuzuAuthClient {
       RETURN DISTINCT r.id AS resource_id
     `;
 
-    const result = await this.connection.query(query, { userId, capability });
+    const result = await this.executeQuery(query, { userId, capability });
     const rows = result.getAll();
     return rows.map((row) => row.resource_id);
   }
@@ -504,7 +648,7 @@ export class KuzuAuthClient {
     capability: string,
     resourceId: string
   ): Promise<void> {
-    await this.connection.query(
+    await this.executeQuery(
       `
       MATCH (u:User {id: $userId}), (r:Resource {id: $resourceId})
       CREATE (u)-[:USER_PERMISSION {capability: $capability}]->(r)
@@ -521,7 +665,7 @@ export class KuzuAuthClient {
     capability: string,
     resourceId: string
   ): Promise<void> {
-    await this.connection.query(
+    await this.executeQuery(
       `
       MATCH (u:User {id: $userId})-[rel:USER_PERMISSION {capability: $capability}]->(r:Resource {id: $resourceId})
       DELETE rel

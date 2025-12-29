@@ -256,6 +256,12 @@
             />
           </div>
         </div>
+        <div class="info-row">
+          <p style="font-size: 14px; color: #666; margin: 8px 0">
+            Using <strong>CDN @kuzu/kuzu-wasm</strong> with multi-threading and
+            Service Worker caching
+          </p>
+        </div>
       </div>
 
       <button id="startBtn">Run Benchmark</button>
@@ -419,6 +425,11 @@
 
         try {
           const runner = new BenchmarkRunner(serverUrl, orgId);
+
+          addLogEntry(
+            `🔧 Using: Multi-threaded CDN with Service Worker caching`,
+            "info"
+          );
 
           updateProgress(10, "Running cold start benchmark...");
           const result = await runner.runAll();

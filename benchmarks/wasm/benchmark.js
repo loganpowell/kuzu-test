@@ -96,7 +96,7 @@ async function initKuzuDB() {
 
       // Dynamic import of KuzuDB WASM (correct package name)
       const kuzu_wasm = await import(
-        "https://unpkg.com/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js"
+        "https://cdn.jsdelivr.net/npm/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js"
       );
 
       // Initialize the WASM module - do this only once

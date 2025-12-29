@@ -6,8 +6,9 @@
  * - Refreshes cache in background to keep data up-to-date
  */
 
-const CACHE_NAME = "kuzu-auth-v1";
+const CACHE_NAME = "kuzu-auth-v2";
 const CSV_ENDPOINT_PATTERN = /\/org\/[^/]+\/csv$/;
+const CDN_WASM_PATTERN = /cdn\.jsdelivr\.net.*\.(js|wasm)$/;
 
 self.addEventListener("install", (event) => {
   console.log("[ServiceWorker] Installing...");
@@ -33,10 +34,37 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
-  // Only intercept CSV data requests
-  if (!CSV_ENDPOINT_PATTERN.test(url.pathname)) {
+  // Check if this is a CDN WASM file request
+  const isCDNWasm = CDN_WASM_PATTERN.test(event.request.url);
+  const isCSVData = CSV_ENDPOINT_PATTERN.test(url.pathname);
+
+  // Only intercept CSV data or CDN WASM requests
+  if (!isCSVData && !isCDNWasm) {
     return;
   }
+
+  // Handle CDN WASM files with cache-first strategy
+  if (isCDNWasm) {
+    console.log("[ServiceWorker] Fetch CDN WASM:", url.href);
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cachedResponse = await cache.match(event.request);
+        if (cachedResponse) {
+          console.log("[ServiceWorker] Serving WASM from cache:", url.href);
+          return cachedResponse;
+        }
+        // Fetch and cache
+        const networkResponse = await fetch(event.request);
+        if (networkResponse.ok) {
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      })
+    );
+    return;
+  }
+
+  // Handle CSV data (existing logic)
 
   console.log("[ServiceWorker] Fetch CSV:", url.href);
 

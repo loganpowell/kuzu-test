@@ -13,6 +13,17 @@ from pathlib import Path
 class BenchmarkServerHandler(SimpleHTTPRequestHandler):
     """HTTP handler that serves files and accepts POST requests to save results."""
 
+    def end_headers(self):
+        """Add COOP/COEP headers to enable SharedArrayBuffer for WASM."""
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        self.send_header("Cross-Origin-Resource-Policy", "cross-origin")
+        super().end_headers()
+
+    def do_GET(self):
+        """Serve GET requests with proper COOP/COEP headers."""
+        return super().do_GET()
+
     def do_POST(self):
         """Handle POST requests to save benchmark results."""
         if self.path == "/save-results":
