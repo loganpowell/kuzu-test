@@ -39,6 +39,42 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+    // Version: 2025-12-29-v4 - Forward WebSocket requests directly to DO
+    const upgrade = request.headers.get("Upgrade");
+    if (upgrade?.toLowerCase() === "websocket") {
+      // Match /org/{orgId}/ws pattern
+      const orgMatch = path.match(/^\/org\/([^/]+)\/ws$/);
+      if (orgMatch) {
+        const orgId = orgMatch[1];
+        console.log(`[Worker v4] Forwarding WebSocket to DO: ${orgId}`);
+
+        // Get org-specific Durable Object
+        const id = env.GRAPH_STATE_DO.idFromName(orgId);
+        const stub = env.GRAPH_STATE_DO.get(id);
+
+        // Forward the original request - DO will handle WebSocket upgrade
+        return stub.fetch(request);
+      }
+    }
+
+    // WebSocket and per-org routes (Phase 3) - OUTSIDE try-catch to avoid interference
+    // Pattern: /org/{orgId}/ws or /org/{orgId}/changes
+    const orgMatch = path.match(/^\/org\/([^/]+)\/(.+)$/);
+    if (orgMatch) {
+      const orgId = orgMatch[1];
+      const subPath = orgMatch[2];
+      console.log(
+        `[Worker] Matched org route: orgId=${orgId}, subPath=${subPath}`
+      );
+
+      // Get org-specific Durable Object
+      const id = env.GRAPH_STATE_DO.idFromName(orgId);
+      const stub = env.GRAPH_STATE_DO.get(id);
+
+      // Forward request to DO and return directly
+      return await stub.fetch(request);
+    }
+
     try {
       // Health check
       if (path === "/health") {
@@ -70,8 +106,8 @@ export default {
         return handleGetCSV(env, orgId, corsHeaders);
       }
 
-      // Get Durable Object instance (singleton for the entire graph)
-      const id = env.GRAPH_STATE_DO.idFromName("primary");
+      // Legacy routes (backwards compatibility) - use default org
+      const id = env.GRAPH_STATE_DO.idFromName("org_default");
       const stub = env.GRAPH_STATE_DO.get(id);
 
       // Route based on path

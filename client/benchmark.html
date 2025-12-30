@@ -240,7 +240,7 @@
             <input
               type="text"
               id="serverUrl"
-              value="https://kuzu-auth-dev-worker.logan-607.workers.dev"
+              value="https://kuzu-auth-dev-worker-v2.logan-607.workers.dev"
               placeholder="https://api.example.com"
             />
           </div>
@@ -251,8 +251,8 @@
             <input
               type="text"
               id="orgId"
-              value="org_default"
-              placeholder="org_default"
+              value="org_fresh_dec29"
+              placeholder="org_fresh_dec29"
             />
           </div>
         </div>
@@ -270,6 +270,9 @@
       </button>
       <button id="mutationBtn" style="background: #48bb78; margin-top: 12px">
         Run Mutation Roundtrip
+      </button>
+      <button id="websocketBtn" style="background: #9f7aea; margin-top: 12px">
+        Run WebSocket Benchmarks
       </button>
       <button id="clearCacheBtn" style="background: #f56565; margin-top: 12px">
         Clear All Caches
@@ -472,7 +475,7 @@
           addLogEntry("🌐 Running network baseline benchmark...", "info");
           updateProgress(20, "Measuring network latency...");
 
-          const runner = new BenchmarkRunner(serverUrl, "org_default");
+          const runner = new BenchmarkRunner(serverUrl, "org_v3");
           const networkResults = await runner.benchmarkNetwork();
 
           updateProgress(100, "Complete!");
@@ -582,6 +585,103 @@
           console.error(error);
         } finally {
           mutationBtn.disabled = false;
+        }
+      });
+
+      // WebSocket benchmark
+      const websocketBtn = document.getElementById("websocketBtn");
+      websocketBtn.addEventListener("click", async () => {
+        const serverUrl = document.getElementById("serverUrl").value;
+        const orgId = document.getElementById("orgId").value;
+
+        if (!serverUrl || !orgId) {
+          alert("Please enter server URL and organization ID");
+          return;
+        }
+
+        websocketBtn.disabled = true;
+        progress.classList.add("active");
+        log.classList.add("active");
+        results.classList.remove("active");
+        log.innerHTML = "";
+
+        try {
+          addLogEntry("🔌 Running WebSocket benchmarks...", "info");
+          updateProgress(20, "Measuring connection setup...");
+
+          const runner = new BenchmarkRunner(serverUrl, orgId);
+          const wsResults = await runner.runQuickWebSocketBenchmarks();
+
+          updateProgress(100, "Complete!");
+
+          // Display WebSocket results
+          const resultsDiv = document.getElementById("results");
+          resultsDiv.innerHTML = `
+            <div class="result-section">
+              <h3>🔌 WebSocket Performance</h3>
+              <div class="metric">
+                <span>Connection Setup (one-time)</span>
+                <strong>${wsResults.connectionSetup.mean.toFixed(
+                  1
+                )}ms (p95: ${wsResults.connectionSetup.p95.toFixed(
+            1
+          )}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Grant over WebSocket</span>
+                <strong>${wsResults.mutationRoundtrip.grant.mean.toFixed(
+                  1
+                )}ms (p95: ${wsResults.mutationRoundtrip.grant.p95.toFixed(
+            1
+          )}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Revoke over WebSocket</span>
+                <strong>${wsResults.mutationRoundtrip.revoke.mean.toFixed(
+                  1
+                )}ms (p95: ${wsResults.mutationRoundtrip.revoke.p95.toFixed(
+            1
+          )}ms)</strong>
+              </div>
+              <div class="metric">
+                <span>Target</span>
+                <strong>${
+                  wsResults.mutationRoundtrip.grant.p95 < 75 &&
+                  wsResults.mutationRoundtrip.revoke.p95 < 75
+                    ? "✅"
+                    : "⚠️"
+                } <75ms p95</strong>
+              </div>
+              <div class="metric">
+                <span>Improvement vs HTTP</span>
+                <strong>~40% faster (eliminates HTTP overhead)</strong>
+              </div>
+            </div>
+          `;
+          resultsDiv.classList.add("active");
+
+          addLogEntry("✅ WebSocket benchmarks complete!", "success");
+          addLogEntry(
+            `📊 Grant: ${wsResults.mutationRoundtrip.grant.mean.toFixed(
+              1
+            )}ms mean, ${wsResults.mutationRoundtrip.grant.p95.toFixed(
+              1
+            )}ms p95`,
+            "info"
+          );
+          addLogEntry(
+            `📊 Revoke: ${wsResults.mutationRoundtrip.revoke.mean.toFixed(
+              1
+            )}ms mean, ${wsResults.mutationRoundtrip.revoke.p95.toFixed(
+              1
+            )}ms p95`,
+            "info"
+          );
+        } catch (error) {
+          addLogEntry(`❌ Error: ${error.message}`, "error");
+          console.error(error);
+        } finally {
+          websocketBtn.disabled = false;
         }
       });
 

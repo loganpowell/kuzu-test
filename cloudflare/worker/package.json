@@ -9,7 +9,17 @@
     "build": "wrangler deploy --dry-run --outdir=dist",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "test": "vitest"
+    "test": "vitest",
+    "stress-test": "tsx tests/stress-test.ts",
+    "stress-test:small": "tsx tests/stress-test.ts --clients=5 --mutations=10",
+    "stress-test:medium": "tsx tests/stress-test.ts --clients=20 --mutations=50",
+    "stress-test:large": "tsx tests/stress-test.ts --clients=50 --mutations=100",
+    "stress-test:reconnect": "tsx tests/stress-test.ts --clients=10 --mutations=20 --reconnect",
+    "benchmark": "tsx tests/benchmark-stress.ts --scenario=medium",
+    "benchmark:light": "tsx tests/benchmark-stress.ts --scenario=light",
+    "benchmark:medium": "tsx tests/benchmark-stress.ts --scenario=medium",
+    "benchmark:heavy": "tsx tests/benchmark-stress.ts --scenario=heavy",
+    "benchmark:all": "tsx tests/benchmark-stress.ts --scenario=full"
   },
   "dependencies": {
     "kuzu-wasm": "^0.11.3"
@@ -17,9 +27,13 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/node": "^20.10.6",
+    "@types/ws": "^8.18.1",
     "esbuild": "^0.19.11",
+    "node-fetch": "^3.3.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0",
-    "wrangler": "^4.54.0"
+    "wrangler": "^4.54.0",
+    "ws": "^8.18.0"
   }
 }

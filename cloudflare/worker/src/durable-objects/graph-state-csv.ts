@@ -21,16 +21,37 @@ interface Permission {
 }
 
 export class GraphStateCSV {
+  private static readonly SCHEMA_VERSION = 2; // Increment when schema changes
+
   private state: DurableObjectState;
   private env: Env;
   private orgId: string;
   private initialized: boolean = false;
+  private schemaVersion: number = 0; // Cached schema version
 
   // Indexes (same as test-graph-data.ts)
   private memberOfIndex = new Map<string, Set<string>>();
   private inheritsFromIndex = new Map<string, string>();
   private userPermIndex = new Map<string, Map<string, Permission>>();
   private groupPermIndex = new Map<string, Map<string, Permission>>();
+
+  // WebSocket connection tracking
+  private connections = new Map<
+    string,
+    {
+      ws: WebSocket;
+      lastActivity: number;
+      version: number;
+    }
+  >();
+  private wsToClientId = new Map<WebSocket, string>(); // Reverse map for Hibernation API
+  private idleTimeoutTimer?: number;
+
+  // Mutation log with idle-triggered KV backup
+  private currentVersion: number = 0;
+  private idleBackupTimer?: number;
+  private lastBackupVersion: number = 0;
+  private mutationLogInitialized: boolean = false;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -43,16 +64,31 @@ export class GraphStateCSV {
    * Handle incoming requests
    */
   async fetch(request: Request): Promise<Response> {
+    // Handle WebSocket upgrade requests BEFORE try-catch
+    // to avoid error handling interfering with WebSocket responses
+    const upgrade = request.headers.get("Upgrade");
+    console.log(`[GraphStateCSV ${this.orgId}] Upgrade header: ${upgrade}`);
+    if (upgrade?.toLowerCase() === "websocket") {
+      console.log(
+        `[GraphStateCSV ${this.orgId}] Handling WebSocket upgrade...`
+      );
+      await this.ensureInitialized();
+      return await this.handleWebSocketUpgrade(request);
+    }
+
     try {
       await this.ensureInitialized();
 
       const url = new URL(request.url);
       const path = url.pathname;
 
+      // Handle routes with or without /org/{orgId} prefix
       if (path === "/check" || path.endsWith("/check")) {
         return await this.handleCheck(request);
       } else if (path === "/stats" || path.endsWith("/stats")) {
         return await this.handleStats();
+      } else if (path === "/changes" || path.endsWith("/changes")) {
+        return await this.handleChanges(request);
       } else if (path === "/grant" || path.endsWith("/grant")) {
         return await this.handleGrant(request);
       } else if (path === "/revoke" || path.endsWith("/revoke")) {
@@ -61,6 +97,9 @@ export class GraphStateCSV {
         return await this.handleDataEndpoint();
       } else if (path === "/csv" || path.endsWith("/csv")) {
         return await this.handleCSVEndpoint();
+      } else if (path.endsWith("/ws")) {
+        // WebSocket endpoint (shouldn't reach here if upgrade header is present)
+        return this.jsonResponse({ error: "WebSocket upgrade required" }, 400);
       }
 
       return this.jsonResponse({ error: "Unknown path" }, 400);
@@ -69,6 +108,634 @@ export class GraphStateCSV {
       return this.jsonResponse(
         {
           error: "Request failed",
+          message: error instanceof Error ? error.message : "Unknown error",
+        },
+        500
+      );
+    }
+  }
+
+  /**
+   * Handle WebSocket upgrade requests
+   */
+  private async handleWebSocketUpgrade(request: Request): Promise<Response> {
+    // Create WebSocket pair
+    const pair = new WebSocketPair();
+    const [client, server] = [pair[0], pair[1]];
+
+    // Use Hibernation API - state.acceptWebSocket() is required for Worker->DO pattern
+    this.state.acceptWebSocket(server);
+
+    // Generate unique client ID
+    const clientId = crypto.randomUUID();
+
+    // Track connection with reverse map for Hibernation API
+    this.connections.set(clientId, {
+      ws: server,
+      lastActivity: Date.now(),
+      version: 0, // Will be updated when client sends initial version
+    });
+    this.wsToClientId.set(server, clientId);
+
+    console.log(
+      `[GraphStateCSV ${this.orgId}] WebSocket connected: ${clientId} (${this.connections.size} total)`
+    );
+
+    // NOTE: With Hibernation API, event handlers are not used.
+    // Instead, implement webSocketMessage(), webSocketClose(), webSocketError() below.
+
+    // Start idle timeout checker if not already running
+    if (!this.idleTimeoutTimer) {
+      this.startIdleTimeoutChecker();
+    }
+
+    // Return the client WebSocket with status 101
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
+    });
+  }
+
+  /**
+   * Durable Object WebSocket lifecycle: Handle incoming messages
+   * Called by Cloudflare runtime when using Hibernation API
+   */
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
+    const clientId = this.wsToClientId.get(ws);
+    if (!clientId) {
+      console.error(`[GraphStateCSV ${this.orgId}] WebSocket not found in map`);
+      return;
+    }
+
+    try {
+      const data = JSON.parse(message as string);
+      console.log(
+        `[GraphStateCSV ${this.orgId}] WS message from ${clientId}:`,
+        JSON.stringify(data)
+      );
+      await this.handleWebSocketMessage(clientId, data);
+    } catch (error) {
+      console.error(
+        `[GraphStateCSV ${this.orgId}] WebSocket message error:`,
+        error
+      );
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          message: error instanceof Error ? error.message : "Unknown error",
+        })
+      );
+    }
+  }
+
+  /**
+   * Durable Object WebSocket lifecycle: Handle disconnections
+   * Called by Cloudflare runtime when using Hibernation API
+   */
+  async webSocketClose(
+    ws: WebSocket,
+    code: number,
+    reason: string,
+    wasClean: boolean
+  ) {
+    const clientId = this.wsToClientId.get(ws);
+    if (!clientId) return;
+
+    console.log(
+      `[GraphStateCSV ${this.orgId}] WebSocket disconnected: ${clientId}, code=${code}, reason=${reason}`
+    );
+
+    this.connections.delete(clientId);
+    this.wsToClientId.delete(ws);
+  }
+
+  /**
+   * Durable Object WebSocket lifecycle: Handle errors
+   * Called by Cloudflare runtime when using Hibernation API
+   */
+  async webSocketError(ws: WebSocket, error: any) {
+    const clientId = this.wsToClientId.get(ws);
+    console.error(
+      `[GraphStateCSV ${this.orgId}] WebSocket error for ${clientId}:`,
+      error
+    );
+  }
+
+  /**
+   * Handle incoming WebSocket messages
+   */
+  private async handleWebSocketMessage(
+    clientId: string,
+    data: any
+  ): Promise<void> {
+    const conn = this.connections.get(clientId);
+    if (!conn) return;
+
+    // Update last activity
+    conn.lastActivity = Date.now();
+
+    switch (data.type) {
+      case "ping":
+        // Respond with pong
+        conn.ws.send(JSON.stringify({ type: "pong" }));
+        break;
+
+      case "version":
+        // Client sending current version for tracking
+        conn.version = data.version || 0;
+        break;
+
+      case "mutate":
+        // Handle mutation request (grant/revoke)
+        await this.handleWebSocketMutation(clientId, data);
+        break;
+
+      default:
+        console.warn(
+          `[GraphStateCSV ${this.orgId}] Unknown WebSocket message type: ${data.type}`
+        );
+    }
+  }
+
+  /**
+   * Handle mutation request from WebSocket client
+   */
+  private async handleWebSocketMutation(
+    clientId: string,
+    data: any
+  ): Promise<void> {
+    const conn = this.connections.get(clientId);
+    if (!conn) return;
+
+    // ALWAYS check schema version first (even on already-initialized DOs)
+    await this.ensureSchemaVersion();
+
+    // Ensure mutation log is initialized before processing mutations
+    await this.initializeMutationLog();
+
+    try {
+      console.log(
+        `[GraphStateCSV ${this.orgId}] WebSocket mutation from ${clientId}:`,
+        data.operation
+      );
+
+      let version: number;
+
+      if (data.operation === "grant") {
+        // Process grant
+        version = await this.processMutationGrant(
+          data.user,
+          data.permission,
+          data.resource
+        );
+      } else if (data.operation === "revoke") {
+        // Process revoke
+        version = await this.processMutationRevoke(
+          data.user,
+          data.permission,
+          data.resource
+        );
+      } else {
+        throw new Error(`Unknown operation: ${data.operation}`);
+      }
+
+      // Send ack to requesting client
+      conn.ws.send(
+        JSON.stringify({
+          type: "ack",
+          success: true,
+          version,
+        })
+      );
+    } catch (error) {
+      console.error(
+        `[GraphStateCSV ${this.orgId}] WebSocket mutation error:`,
+        error
+      );
+
+      // Send error ack
+      conn.ws.send(
+        JSON.stringify({
+          type: "ack",
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        })
+      );
+    }
+  }
+
+  /**
+   * Broadcast message to all connected WebSocket clients
+   */
+  private broadcast(message: any): void {
+    const messageStr = JSON.stringify(message);
+    const deadConnections: string[] = [];
+
+    for (const [clientId, conn] of this.connections.entries()) {
+      try {
+        conn.ws.send(messageStr);
+      } catch (error) {
+        console.error(
+          `[GraphStateCSV ${this.orgId}] Failed to send to ${clientId}:`,
+          error
+        );
+        deadConnections.push(clientId);
+      }
+    }
+
+    // Clean up dead connections
+    for (const clientId of deadConnections) {
+      console.log(
+        `[GraphStateCSV ${this.orgId}] Removing dead connection: ${clientId}`
+      );
+      this.connections.delete(clientId);
+    }
+  }
+
+  /**
+   * Start idle timeout checker (runs every 60 seconds)
+   */
+  private startIdleTimeoutChecker(): void {
+    const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const CHECK_INTERVAL_MS = 60 * 1000; // Check every 60 seconds
+
+    this.idleTimeoutTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [clientId, conn] of this.connections.entries()) {
+        const idleTime = now - conn.lastActivity;
+        if (idleTime > IDLE_TIMEOUT_MS) {
+          console.log(
+            `[GraphStateCSV ${
+              this.orgId
+            }] Closing idle connection: ${clientId} (idle ${Math.round(
+              idleTime / 1000
+            )}s)`
+          );
+          conn.ws.close(1000, "Idle timeout");
+          this.connections.delete(clientId);
+        }
+      }
+
+      // Stop checker if no connections
+      if (this.connections.size === 0 && this.idleTimeoutTimer) {
+        clearInterval(this.idleTimeoutTimer);
+        this.idleTimeoutTimer = undefined;
+      }
+    }, CHECK_INTERVAL_MS) as unknown as number;
+  }
+
+  /**
+   * Force recreation of mutation_log table (fixes old DOs with wrong schema)
+   */
+  private async recreateMutationLogTable(): Promise<void> {
+    console.log(
+      `[GraphStateCSV ${this.orgId}] Forcing mutation_log table recreation...`
+    );
+
+    await this.state.storage.sql.exec(`DROP TABLE IF EXISTS mutation_log`);
+    console.log(`[GraphStateCSV ${this.orgId}] Dropped mutation_log table`);
+
+    await this.state.storage.sql.exec(`
+      CREATE TABLE mutation_log (
+        version INTEGER PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        type TEXT NOT NULL,
+        data TEXT NOT NULL
+      )
+    `);
+    console.log(
+      `[GraphStateCSV ${this.orgId}] Created mutation_log table with correct schema`
+    );
+  }
+
+  /**
+   * Get current schema version from database
+   */
+  private async getSchemaVersion(): Promise<number> {
+    try {
+      const result = await this.state.storage.sql.exec(
+        `SELECT version FROM schema_version LIMIT 1`
+      );
+      return result.one()?.version || 0;
+    } catch {
+      // Table doesn't exist, version is 0
+      return 0;
+    }
+  }
+
+  /**
+   * Set schema version in database
+   */
+  private async setSchemaVersion(version: number): Promise<void> {
+    await this.state.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS schema_version (
+        version INTEGER PRIMARY KEY
+      )
+    `);
+    await this.state.storage.sql.exec(
+      `INSERT OR REPLACE INTO schema_version (version) VALUES (?)`,
+      version // Single value, no spread needed
+    );
+  }
+
+  /**
+   * Ensure schema is up to date (called before initialization guard)
+   */
+  private async ensureSchemaVersion(): Promise<void> {
+    // Check cached version first
+    if (this.schemaVersion === GraphStateCSV.SCHEMA_VERSION) {
+      return; // Already at correct version
+    }
+
+    // Get version from database
+    const currentVersion = await this.getSchemaVersion();
+
+    if (currentVersion < GraphStateCSV.SCHEMA_VERSION) {
+      console.log(
+        `[GraphStateCSV ${this.orgId}] Migrating schema from v${currentVersion} to v${GraphStateCSV.SCHEMA_VERSION}`
+      );
+
+      // Drop and recreate mutation_log table with correct schema
+      await this.state.storage.sql.exec(`DROP TABLE IF EXISTS mutation_log`);
+      console.log(`[GraphStateCSV ${this.orgId}] Dropped mutation_log table`);
+
+      await this.state.storage.sql.exec(`
+        CREATE TABLE mutation_log (
+          version INTEGER PRIMARY KEY,
+          timestamp TEXT NOT NULL,
+          type TEXT NOT NULL,
+          data TEXT NOT NULL
+        )
+      `);
+      console.log(
+        `[GraphStateCSV ${this.orgId}] Created mutation_log table with correct schema`
+      );
+
+      // Update schema version
+      await this.setSchemaVersion(GraphStateCSV.SCHEMA_VERSION);
+      console.log(`[GraphStateCSV ${this.orgId}] Schema migration complete`);
+    }
+
+    // Cache the version in memory
+    this.schemaVersion = GraphStateCSV.SCHEMA_VERSION;
+  }
+
+  /**
+   * Initialize mutation log from SQLite and KV backup
+   */
+  private async initializeMutationLog(): Promise<void> {
+    // Check schema version first (before guard)
+    await this.ensureSchemaVersion();
+
+    if (this.mutationLogInitialized) return;
+
+    console.log(`[GraphStateCSV ${this.orgId}] Initializing mutation log...`);
+
+    // Schema is already correct (checked by ensureSchemaVersion)
+    // Just create table if it doesn't exist (shouldn't happen after migration, but safe)
+    await this.state.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS mutation_log (
+        version INTEGER PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        type TEXT NOT NULL,
+        data TEXT NOT NULL
+      )
+    `);
+
+    // Get current version from SQLite
+    const result = await this.state.storage.sql.exec(
+      `SELECT COALESCE(MAX(version), 0) as max_version FROM mutation_log`
+    );
+    console.log(
+      `[GraphStateCSV ${this.orgId}] SQL result type:`,
+      typeof result,
+      "keys:",
+      Object.keys(result || {})
+    );
+    console.log(`[GraphStateCSV ${this.orgId}] SQL result.rows:`, result?.rows);
+    console.log(
+      `[GraphStateCSV ${this.orgId}] SQL result[0]:`,
+      (result as any)?.[0]
+    );
+
+    // Handle different return formats
+    const rows = (result as any)?.rows || (result as any);
+    this.currentVersion = rows?.[0]?.max_version || 0;
+
+    // Check KV for recent mutations (cold start recovery)
+    const kvMutations = await this.loadMutationsFromKV();
+    if (kvMutations.length > 0) {
+      const maxKvVersion = Math.max(...kvMutations.map((m) => m.version));
+      const versionGap = maxKvVersion - this.currentVersion;
+
+      if (versionGap > 0 && versionGap <= 100) {
+        // Restore mutations from KV to SQLite
+        console.log(
+          `[GraphStateCSV ${this.orgId}] Restoring ${kvMutations.length} mutations from KV`
+        );
+        for (const mutation of kvMutations) {
+          if (mutation.version > this.currentVersion) {
+            await this.state.storage.sql.exec(
+              `INSERT OR IGNORE INTO mutation_log (version, timestamp, type, data) VALUES (?, ?, ?, ?)`,
+              mutation.version,
+              mutation.timestamp,
+              mutation.type,
+              mutation.data
+            );
+          }
+        }
+        this.currentVersion = maxKvVersion;
+      }
+
+      this.lastBackupVersion = maxKvVersion;
+    }
+
+    this.mutationLogInitialized = true;
+    console.log(
+      `[GraphStateCSV ${this.orgId}] Mutation log initialized (current version: ${this.currentVersion})`
+    );
+  }
+
+  /**
+   * Load recent mutations from KV
+   */
+  private async loadMutationsFromKV(): Promise<
+    Array<{ version: number; timestamp: string; type: string; data: string }>
+  > {
+    const mutations: Array<{
+      version: number;
+      timestamp: string;
+      type: string;
+      data: string;
+    }> = [];
+
+    // List mutations from KV (last 1000)
+    const listResult = await this.env.PERMISSIONS_KV.list({
+      prefix: `${this.orgId}:mutation:`,
+      limit: 1000,
+    });
+
+    // Load each mutation
+    for (const key of listResult.keys) {
+      const data = await this.env.PERMISSIONS_KV.get(key.name, "json");
+      if (data) {
+        mutations.push(data as any);
+      }
+    }
+
+    return mutations.sort((a, b) => a.version - b.version);
+  }
+
+  /**
+   * Log a mutation to SQLite and schedule idle backup
+   */
+  private async logMutation(type: string, data: any): Promise<number> {
+    this.currentVersion++;
+    const timestamp = new Date().toISOString();
+
+    // Write to SQLite (fast, hot path)
+    await this.state.storage.sql.exec(
+      `INSERT INTO mutation_log (version, timestamp, type, data) VALUES (?, ?, ?, ?)`,
+      this.currentVersion,
+      timestamp,
+      type,
+      JSON.stringify(data)
+    );
+
+    // Clean up old mutations (keep last 1000)
+    await this.state.storage.sql.exec(
+      `DELETE FROM mutation_log WHERE version < ?`,
+      this.currentVersion - 1000
+    );
+
+    // Schedule idle backup (debounced)
+    this.scheduleIdleBackup();
+
+    return this.currentVersion;
+  }
+
+  /**
+   * Schedule idle backup (debounced - cancels previous timer)
+   */
+  private scheduleIdleBackup(): void {
+    // Cancel existing timer (debounce)
+    if (this.idleBackupTimer) {
+      clearTimeout(this.idleBackupTimer);
+    }
+
+    // Schedule backup after 5 seconds of idle
+    this.idleBackupTimer = setTimeout(() => {
+      this.state.waitUntil(this.backupUnbackedMutations());
+    }, 5000) as unknown as number;
+  }
+
+  /**
+   * Backup unbacked mutations to KV
+   */
+  private async backupUnbackedMutations(): Promise<void> {
+    if (this.currentVersion === this.lastBackupVersion) {
+      return; // Nothing to backup
+    }
+
+    console.log(
+      `[GraphStateCSV ${this.orgId}] Backing up mutations ${
+        this.lastBackupVersion + 1
+      } to ${this.currentVersion}`
+    );
+
+    // Query mutations since last backup
+    const result = await this.state.storage.sql.exec(
+      `SELECT version, timestamp, type, data FROM mutation_log WHERE version > ?`,
+      [this.lastBackupVersion]
+    );
+
+    // Write to KV in parallel
+    await Promise.all(
+      result.rows.map((mutation: any) =>
+        this.env.PERMISSIONS_KV.put(
+          `${this.orgId}:mutation:${mutation.version}`,
+          JSON.stringify(mutation)
+        )
+      )
+    );
+
+    this.lastBackupVersion = this.currentVersion;
+    console.log(
+      `[GraphStateCSV ${this.orgId}] Backup complete (version: ${this.currentVersion})`
+    );
+  }
+
+  /**
+   * Handle /changes endpoint for catch-up sync
+   */
+  private async handleChanges(request: Request): Promise<Response> {
+    try {
+      const url = new URL(request.url);
+      const sinceParam = url.searchParams.get("since");
+      const since = sinceParam ? parseInt(sinceParam, 10) : 0;
+
+      console.log(
+        `[GraphStateCSV ${this.orgId}] handleChanges: since=${since}, currentVersion=${this.currentVersion}, mutationLogInitialized=${this.mutationLogInitialized}`
+      );
+
+      if (isNaN(since)) {
+        return this.jsonResponse({ error: "Invalid 'since' parameter" }, 400);
+      }
+
+      // Check version gap
+      const versionGap = this.currentVersion - since;
+
+      // Edge case 1: Client is ahead of server (should not happen)
+      if (versionGap < 0) {
+        return this.jsonResponse(
+          {
+            error: "Client version ahead of server",
+            currentVersion: this.currentVersion,
+            fullSyncRequired: true,
+          },
+          400
+        );
+      }
+
+      // Edge case 2: Client is at current version
+      if (versionGap === 0) {
+        return this.jsonResponse({
+          currentVersion: this.currentVersion,
+          changes: [],
+        });
+      }
+
+      // Edge case 3: Gap too large (> 1000 mutations kept)
+      if (versionGap > 1000) {
+        return this.jsonResponse({
+          currentVersion: this.currentVersion,
+          fullSyncRequired: true,
+          message: "Version gap too large, full sync required",
+        });
+      }
+
+      // Normal case: Fetch mutations since version
+      const result = await this.state.storage.sql.exec(
+        `SELECT version, timestamp, type, data FROM mutation_log WHERE version > ? ORDER BY version ASC`,
+        [since]
+      );
+
+      const changes = result.rows.map((row: any) => ({
+        version: row.version,
+        timestamp: row.timestamp,
+        type: row.type,
+        data: JSON.parse(row.data),
+      }));
+
+      return this.jsonResponse({
+        currentVersion: this.currentVersion,
+        changes,
+      });
+    } catch (error) {
+      console.error(`[GraphStateCSV ${this.orgId}] Changes error:`, error);
+      return this.jsonResponse(
+        {
+          error: "Failed to fetch changes",
           message: error instanceof Error ? error.message : "Unknown error",
         },
         500
@@ -87,6 +754,7 @@ export class GraphStateCSV {
 
     try {
       await this.loadDataFromR2();
+      await this.initializeMutationLog();
       this.initialized = true;
       const duration = Date.now() - startTime;
       console.log(
@@ -319,6 +987,110 @@ export class GraphStateCSV {
   }
 
   /**
+   * Process grant mutation (core logic for both HTTP and WebSocket)
+   */
+  private async processMutationGrant(
+    user: string,
+    permission: string,
+    resource: string
+  ): Promise<number> {
+    // 1. Update in-memory index (fast)
+    if (!this.userPermIndex.has(user)) {
+      this.userPermIndex.set(user, new Map());
+    }
+
+    const perm: Permission = {
+      can_create: permission === "create",
+      can_read: permission === "read",
+      can_update: permission === "update",
+      can_delete: permission === "delete",
+      granted_at: new Date().toISOString(),
+      granted_by: "system",
+    };
+
+    this.userPermIndex.get(user)!.set(resource, perm);
+
+    // 2. Write to DO SQLite (durable, fast - survives while DO is active)
+    const sqliteKey = `perm:${user}:${resource}`;
+    await this.state.storage.put(sqliteKey, perm);
+
+    // 3. Write to KV namespace (async, non-blocking - durable backup)
+    const kvKey = `${this.orgId}:perm:${user}:${resource}`;
+    this.state.waitUntil(
+      this.env.PERMISSIONS_KV.put(kvKey, JSON.stringify(perm))
+    );
+
+    // 4. Log mutation for WebSocket broadcast and catch-up sync
+    const version = await this.logMutation("grant", {
+      user,
+      permission,
+      resource,
+      granted_at: perm.granted_at,
+      granted_by: perm.granted_by,
+    });
+
+    // 5. Broadcast mutation to all connected clients
+    this.broadcast({
+      type: "mutation",
+      version,
+      mutation: {
+        type: "grant",
+        user,
+        permission,
+        resource,
+        granted_at: perm.granted_at,
+        granted_by: perm.granted_by,
+      },
+    });
+
+    return version;
+  }
+
+  /**
+   * Process revoke mutation (core logic for both HTTP and WebSocket)
+   */
+  private async processMutationRevoke(
+    user: string,
+    permission: string,
+    resource: string
+  ): Promise<number> {
+    // 1. Remove from in-memory index
+    const userPerms = this.userPermIndex.get(user);
+    if (userPerms) {
+      userPerms.delete(resource);
+    }
+
+    // 2. Delete from DO SQLite
+    const sqliteKey = `perm:${user}:${resource}`;
+    await this.state.storage.delete(sqliteKey);
+
+    // 3. Delete from KV namespace (async, non-blocking)
+    const kvKey = `${this.orgId}:perm:${user}:${resource}`;
+    this.state.waitUntil(this.env.PERMISSIONS_KV.delete(kvKey));
+
+    // 4. Log mutation for WebSocket broadcast and catch-up sync
+    const version = await this.logMutation("revoke", {
+      user,
+      permission,
+      resource,
+    });
+
+    // 5. Broadcast mutation to all connected clients
+    this.broadcast({
+      type: "mutation",
+      version,
+      mutation: {
+        type: "revoke",
+        user,
+        permission,
+        resource,
+      },
+    });
+
+    return version;
+  }
+
+  /**
    * Grant permission (stores in memory + DO SQLite + KV)
    */
   private async handleGrant(request: Request): Promise<Response> {
@@ -331,36 +1103,11 @@ export class GraphStateCSV {
         return this.jsonResponse({ error: "Missing parameters" }, 400);
       }
 
-      // 1. Update in-memory index (fast)
-      const memoryStartTime = Date.now();
-      if (!this.userPermIndex.has(user)) {
-        this.userPermIndex.set(user, new Map());
-      }
-
-      const perm: Permission = {
-        can_create: permission === "create",
-        can_read: permission === "read",
-        can_update: permission === "update",
-        can_delete: permission === "delete",
-        granted_at: new Date().toISOString(),
-        granted_by: "system",
-      };
-
-      this.userPermIndex.get(user)!.set(resource, perm);
-      const memoryTime = Date.now() - memoryStartTime;
-
-      // 2. Write to DO SQLite (durable, fast - survives while DO is active)
-      const sqliteStartTime = Date.now();
-      const sqliteKey = `perm:${user}:${resource}`;
-      await this.state.storage.put(sqliteKey, perm);
-      const sqliteTime = Date.now() - sqliteStartTime;
-
-      // 3. Write to KV namespace (async, non-blocking - durable backup)
-      const kvKey = `${this.orgId}:perm:${user}:${resource}`;
-      this.state.waitUntil(
-        this.env.PERMISSIONS_KV.put(kvKey, JSON.stringify(perm))
+      const version = await this.processMutationGrant(
+        user,
+        permission,
+        resource
       );
-
       const totalTime = Date.now() - startTime;
 
       return this.jsonResponse({
@@ -368,10 +1115,8 @@ export class GraphStateCSV {
         user,
         permission,
         resource,
+        version,
         timing: {
-          memoryMs: memoryTime,
-          sqliteMs: sqliteTime,
-          kvMs: 0, // Async - not blocking response
           totalMs: totalTime,
         },
       });
@@ -400,34 +1145,19 @@ export class GraphStateCSV {
         return this.jsonResponse({ error: "Missing parameters" }, 400);
       }
 
-      // 1. Remove from in-memory index
-      const memoryStartTime = Date.now();
-      const userPerms = this.userPermIndex.get(user);
-      if (userPerms) {
-        userPerms.delete(resource);
-      }
-      const memoryTime = Date.now() - memoryStartTime;
-
-      // 2. Delete from DO SQLite
-      const sqliteStartTime = Date.now();
-      const sqliteKey = `perm:${user}:${resource}`;
-      await this.state.storage.delete(sqliteKey);
-      const sqliteTime = Date.now() - sqliteStartTime;
-
-      // 3. Delete from KV namespace (async, non-blocking)
-      const kvKey = `${this.orgId}:perm:${user}:${resource}`;
-      this.state.waitUntil(this.env.PERMISSIONS_KV.delete(kvKey));
-
+      const version = await this.processMutationRevoke(
+        user,
+        permission,
+        resource
+      );
       const totalTime = Date.now() - startTime;
 
       return this.jsonResponse({
         success: true,
         user,
         resource,
+        version,
         timing: {
-          memoryMs: memoryTime,
-          sqliteMs: sqliteTime,
-          kvMs: 0, // Async - not blocking response
           totalMs: totalTime,
         },
       });

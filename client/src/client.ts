@@ -1,5 +1,10 @@
 import type Database from "kuzu-wasm";
 import { openDB, type IDBPDatabase } from "idb";
+import {
+  WebSocketManager,
+  type MutationMessage,
+  type ConnectionState,
+} from "./websocket-manager";
 
 /**
  * IndexedDB schema for storing graph data
@@ -33,8 +38,9 @@ export class KuzuAuthClient {
   private fs: any = null;
   private serverUrl: string;
   private orgId: string;
-  private wsConnection: WebSocket | null = null;
+  private wsManager: WebSocketManager | null = null;
   private useMultiThreadedCDN: boolean;
+  private currentVersion: number = 0;
 
   // Cold start timing metrics
   public coldStartTimings: {
@@ -157,6 +163,9 @@ export class KuzuAuthClient {
 
     const total = performance.now() - startTotal;
     this.coldStartTimings.total = total;
+
+    // Initialize WebSocket connection for real-time updates
+    this.initializeWebSocket();
 
     console.log("[KuzuAuthClient] Ready");
   }
@@ -641,7 +650,39 @@ export class KuzuAuthClient {
   }
 
   /**
-   * Grant permission (local update)
+   * Grant permission via WebSocket mutation
+   */
+  async grant(
+    user: string,
+    permission: string,
+    resource: string
+  ): Promise<{ success: boolean; version?: number }> {
+    if (!this.wsManager || this.wsManager.getState() !== "connected") {
+      throw new Error(
+        "WebSocket not connected. Call initialize() and wait for connection."
+      );
+    }
+
+    console.log(
+      `[KuzuAuthClient] Granting ${permission} on ${resource} to ${user}`
+    );
+
+    const result = await this.wsManager.sendMutation(
+      "grant",
+      user,
+      permission,
+      resource
+    );
+
+    if (!result.success) {
+      throw new Error(result.error || "Grant failed");
+    }
+
+    return result;
+  }
+
+  /**
+   * Grant permission (local update) - used by mutation handler
    */
   private async grantPermission(
     userId: string,
@@ -658,7 +699,39 @@ export class KuzuAuthClient {
   }
 
   /**
-   * Revoke permission (local update)
+   * Revoke permission via WebSocket mutation
+   */
+  async revoke(
+    user: string,
+    permission: string,
+    resource: string
+  ): Promise<{ success: boolean; version?: number }> {
+    if (!this.wsManager || this.wsManager.getState() !== "connected") {
+      throw new Error(
+        "WebSocket not connected. Call initialize() and wait for connection."
+      );
+    }
+
+    console.log(
+      `[KuzuAuthClient] Revoking ${permission} on ${resource} from ${user}`
+    );
+
+    const result = await this.wsManager.sendMutation(
+      "revoke",
+      user,
+      permission,
+      resource
+    );
+
+    if (!result.success) {
+      throw new Error(result.error || "Revoke failed");
+    }
+
+    return result;
+  }
+
+  /**
+   * Revoke permission (local update) - used by mutation handler
    */
   private async revokePermission(
     userId: string,
@@ -723,6 +796,116 @@ export class KuzuAuthClient {
   }
 
   /**
+   * Initialize WebSocket connection for real-time updates
+   */
+  private initializeWebSocket(): void {
+    console.log("[KuzuAuthClient] Initializing WebSocket connection...");
+
+    this.wsManager = new WebSocketManager({
+      serverUrl: this.serverUrl,
+      orgId: this.orgId,
+      onMutation: (mutation) => this.handleMutation(mutation),
+      onStateChange: (state) => this.handleConnectionStateChange(state),
+      onError: (error) => this.handleConnectionError(error),
+    });
+
+    // Connect with current version (0 for now, will track mutations later)
+    this.wsManager.connect(this.currentVersion);
+  }
+
+  /**
+   * Handle incoming mutation from WebSocket broadcast
+   */
+  private async handleMutation(mutation: MutationMessage): Promise<void> {
+    console.log(
+      `[KuzuAuthClient] Applying mutation v${mutation.version}:`,
+      mutation.mutation
+    );
+
+    try {
+      this.currentVersion = mutation.version;
+
+      if (mutation.mutation.type === "grant") {
+        // Apply grant to local KuzuDB graph
+        await this.applyGrantMutation(mutation.mutation);
+      } else if (mutation.mutation.type === "revoke") {
+        // Apply revoke to local KuzuDB graph
+        await this.applyRevokeMutation(mutation.mutation);
+      }
+
+      // Update WebSocket manager with new version
+      if (this.wsManager) {
+        this.wsManager.updateVersion(this.currentVersion);
+      }
+    } catch (error) {
+      console.error("[KuzuAuthClient] Failed to apply mutation:", error);
+    }
+  }
+
+  /**
+   * Apply grant mutation to local graph
+   */
+  private async applyGrantMutation(mutation: any): Promise<void> {
+    // TODO: Implement actual grant mutation application to KuzuDB
+    // For now, just log it
+    console.log("[KuzuAuthClient] Grant:", mutation);
+
+    // Example implementation (needs actual KuzuDB schema):
+    // await this.connection.execute(`
+    //   MERGE (u:User {id: '${mutation.user}'})
+    //   MERGE (r:Resource {id: '${mutation.resource}'})
+    //   MERGE (u)-[:HAS_PERMISSION {
+    //     action: '${mutation.permission}',
+    //     granted_at: '${mutation.granted_at}'
+    //   }]->(r)
+    // `);
+  }
+
+  /**
+   * Apply revoke mutation to local graph
+   */
+  private async applyRevokeMutation(mutation: any): Promise<void> {
+    // TODO: Implement actual revoke mutation application to KuzuDB
+    // For now, just log it
+    console.log("[KuzuAuthClient] Revoke:", mutation);
+
+    // Example implementation:
+    // await this.connection.execute(`
+    //   MATCH (u:User {id: '${mutation.user}'})-[p:HAS_PERMISSION]->(r:Resource {id: '${mutation.resource}'})
+    //   WHERE p.action = '${mutation.permission}'
+    //   DELETE p
+    // `);
+  }
+
+  /**
+   * Handle WebSocket connection state changes
+   */
+  private handleConnectionStateChange(state: ConnectionState): void {
+    console.log(`[KuzuAuthClient] WebSocket state: ${state}`);
+
+    if (state === "error") {
+      console.warn(
+        "[KuzuAuthClient] WebSocket connection error, will auto-reconnect"
+      );
+    }
+  }
+
+  /**
+   * Handle WebSocket connection errors
+   */
+  private handleConnectionError(error: Error): void {
+    console.error("[KuzuAuthClient] WebSocket error:", error);
+
+    if (error.message.includes("Full sync required")) {
+      console.warn(
+        "[KuzuAuthClient] Full sync required - version gap too large"
+      );
+      // TODO: Trigger full resync
+      // this.fullResync();
+    }
+  }
+
+  /**
    * Clear all caches (Service Worker + IndexedDB)
    */
   async clearCache(): Promise<void> {
@@ -755,8 +938,8 @@ export class KuzuAuthClient {
    * Cleanup
    */
   async close(): Promise<void> {
-    if (this.wsConnection) {
-      this.wsConnection.close();
+    if (this.wsManager) {
+      this.wsManager.disconnect();
     }
     if (this.connection) {
       this.connection.close();

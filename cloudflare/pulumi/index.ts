@@ -65,10 +65,10 @@ const workerScript = new cloudflare.WorkerScript(resourceName("worker"), {
   ],
 
   // Durable Object bindings (defined in worker script)
-  durableObjectNamespaceBindings: [
+  durableObjectBindings: [
     {
       name: "GRAPH_STATE_DO",
-      className: "GraphState",
+      className: "GraphStateCSV",
       scriptName: resourceName("worker"),
     },
   ],
@@ -101,7 +101,7 @@ const workerDomain = new cloudflare.WorkerDomain(resourceName("domain"), {
   accountId: accountId,
   hostname: `${resourceName("worker")}.workers.dev`,
   service: workerScript.name,
-  zone: "workers.dev",
+  zoneId: "workers.dev",
 });
 
 // ============================================================================

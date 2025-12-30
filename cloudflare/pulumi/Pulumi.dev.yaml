@@ -1,0 +1,6 @@
+encryptionsalt: v1:P4M551Dg33Q=:v1:WZCmimE9aeRgjqmD:PwmS9rbuSjn5zS7p10OwGfKCEH8JTw==
+config:
+  cloudflare:accountId: 6078f37766de72dca3f0bc4b301891b8
+  cloudflare:apiToken:
+    secure: v1:LjIajYUZ9m5NknYS:hq/JcnkMVdq2ToGVhY222+80rfkevub/0qXy/izc3o5L/0GctdwfSMDrgACdolxZr1KVVit/uLI=
+  kuzu-auth:environment: dev

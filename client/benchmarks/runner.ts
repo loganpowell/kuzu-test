@@ -5,6 +5,8 @@ import { NetworkBenchmark } from "./network.ts";
 import type { NetworkMetrics } from "./network.ts";
 import { MutationBenchmark } from "./mutation.ts";
 import type { MutationMetrics } from "./mutation.ts";
+import { WebSocketBenchmark } from "./websocket.ts";
+import type { WebSocketMetrics } from "./websocket.ts";
 
 /**
  * Benchmark result format
@@ -358,6 +360,32 @@ export class BenchmarkRunner {
     console.log(`\n✅ Benchmark complete in ${duration}s`);
 
     return result;
+  }
+
+  /**
+   * Run WebSocket benchmarks
+   */
+  async runWebSocketBenchmarks(): Promise<WebSocketMetrics> {
+    console.log("\n🔌 Running WebSocket benchmarks...");
+
+    const wsBench = new WebSocketBenchmark(this.serverUrl, this.orgId);
+    const results = await wsBench.runAll();
+
+    console.log("\n✅ WebSocket benchmarks complete");
+    return results;
+  }
+
+  /**
+   * Run quick WebSocket benchmarks
+   */
+  async runQuickWebSocketBenchmarks(): Promise<WebSocketMetrics> {
+    console.log("\n🔌 Running quick WebSocket benchmarks...");
+
+    const wsBench = new WebSocketBenchmark(this.serverUrl, this.orgId);
+    const results = await wsBench.runQuick();
+
+    console.log("\n✅ Quick WebSocket benchmarks complete");
+    return results;
   }
 
   /**

@@ -27,13 +27,15 @@ function extractOrgId(request: Request): string {
   // Try path: /org/{orgId}/...
   const pathMatch = url.pathname.match(/^\/org\/([^\/]+)/);
   if (pathMatch) {
-    return `org_${pathMatch[1]}`;
+    const orgId = pathMatch[1];
+    // Don't add prefix if it already starts with "org_"
+    return orgId.startsWith("org_") ? orgId : `org_${orgId}`;
   }
 
   // Try header
   const headerOrg = request.headers.get("X-Org-Id");
   if (headerOrg) {
-    return `org_${headerOrg}`;
+    return headerOrg.startsWith("org_") ? headerOrg : `org_${headerOrg}`;
   }
 
   // Default org for testing
@@ -62,6 +64,28 @@ export default {
     // Handle preflight
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    // WebSocket upgrade handling - MUST be before try-catch
+    const upgrade = request.headers.get("Upgrade");
+    if (upgrade?.toLowerCase() === "websocket") {
+      // Match /org/{orgId}/ws pattern
+      const orgMatch = path.match(/^\/org\/([^/]+)\/ws$/);
+      if (orgMatch) {
+        const orgIdRaw = orgMatch[1];
+        // Don't add prefix if it already starts with "org_"
+        const orgId = orgIdRaw.startsWith("org_")
+          ? orgIdRaw
+          : `org_${orgIdRaw}`;
+        console.log(`[Worker] Forwarding WebSocket to DO: ${orgId}`);
+
+        // Get org-specific Durable Object
+        const id = env.GRAPH_STATE_DO.idFromName(orgId);
+        const stub = env.GRAPH_STATE_DO.get(id);
+
+        // Forward the original request - DO will handle WebSocket upgrade
+        return stub.fetch(request);
+      }
     }
 
     try {
@@ -98,10 +122,12 @@ export default {
 
       // Extract organization ID
       const orgId = extractOrgId(request);
+      console.log(`[Worker] Extracted orgId: ${orgId} for path: ${path}`);
 
       // Get org-specific Durable Object
       const id = env.GRAPH_STATE_DO.idFromName(orgId);
       const stub = env.GRAPH_STATE_DO.get(id);
+      console.log(`[Worker] Created DO stub with id.name: ${id.name}`);
 
       // Strip /org/{orgId} prefix from path for forwarding
       let forwardPath = path.replace(/^\/org\/[^\/]+/, "");
