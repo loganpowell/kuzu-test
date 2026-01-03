@@ -45,12 +45,12 @@ uv pip install -r requirements.txt
 
 ### Node.js Environment
 
-```bash
+````bash
 cd benchmarks/nodejs
 ## Architecture
 
-**Client**: KuzuDB WASM for graph queries (runs in browser/worker)  
-**Server**: Cloudflare Workers + Durable Objects for validation  
+**Client**: KuzuDB WASM for graph queries (runs in browser/worker)
+**Server**: Cloudflare Workers + Durable Objects for validation
 **Security**: Edge-based validation with chain connectivity checks
 
 See [Security Architecture](./docs/security/SECURITY_ARCHITECTURE_CONCISE.md) for details.
@@ -63,7 +63,7 @@ See [Security Architecture](./docs/security/SECURITY_ARCHITECTURE_CONCISE.md) fo
 cd cloudflare/worker
 npm install
 npm test
-```
+````
 
 All 20 security tests should pass. See [TDD Quick Start](./docs/security/QUICKSTART_TDD.md) for details.
 
@@ -128,6 +128,7 @@ python server.py
 ## License
 
 Private - Kuzu Auth Project
+
 - 3,000 resources
 - 500 groups
 - Permissions and memberships

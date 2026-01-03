@@ -34,13 +34,13 @@ export async function loadGraphData(baseUrl: string): Promise<GraphData> {
     userPerms,
     groupPerms,
   ] = await Promise.all([
-    fetch(`${baseUrl}/users.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/groups.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/resources.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/member_of.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/inherits_from.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/user_permissions.json`).then((r) => r.json()),
-    fetch(`${baseUrl}/group_permissions.json`).then((r) => r.json()),
+    fetch(`${baseUrl}/users.json`).then((r) => r.json()) as Promise<any[]>,
+    fetch(`${baseUrl}/groups.json`).then((r) => r.json()) as Promise<any[]>,
+    fetch(`${baseUrl}/resources.json`).then((r) => r.json()) as Promise<any[]>,
+    fetch(`${baseUrl}/member_of.json`).then((r) => r.json()) as Promise<any[]>,
+    fetch(`${baseUrl}/inherits_from.json`).then((r) => r.json()) as Promise<any[]>,
+    fetch(`${baseUrl}/user_permissions.json`).then((r) => r.json()) as Promise<any[]>,
+    fetch(`${baseUrl}/group_permissions.json`).then((r) => r.json()) as Promise<any[]>,
   ]);
 
   const data: GraphData = {

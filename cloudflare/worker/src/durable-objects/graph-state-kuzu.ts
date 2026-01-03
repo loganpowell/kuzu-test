@@ -77,6 +77,7 @@ export class GraphStateKuzu {
       // 1. Initialize KuzuDB WASM
       // Note: Using the sync version since Cloudflare Workers doesn't support worker threads
       // The async version requires Web Workers which aren't available in Durable Objects
+      // @ts-ignore - kuzu-wasm/sync is optional and may not have type definitions
       const kuzuModule = await import("kuzu-wasm/sync");
       const kuzu = kuzuModule.default;
 

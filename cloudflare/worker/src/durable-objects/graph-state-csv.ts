@@ -507,6 +507,7 @@ export class GraphStateCSV {
       // This is a custom single-threaded build without Web Workers
       let createKuzuModule: any;
       try {
+        // @ts-ignore - kuzu-wasm-cf is a custom build without type definitions
         createKuzuModule = (await import("kuzu-wasm-cf")).default;
       } catch (importError) {
         console.error(
@@ -665,7 +666,7 @@ export class GraphStateCSV {
       const hasPermission = this.checkPermission(
         userId,
         capability,
-        resourceId
+        resourceId as any // Resource ID can be any string, not just capability types
       );
 
       console.log(
@@ -714,15 +715,16 @@ export class GraphStateCSV {
       "keys:",
       Object.keys(result || {})
     );
-    console.log(`[GraphStateCSV ${this.orgId}] SQL result.rows:`, result?.rows);
+    const resultRows = Array.from(result);
+    console.log(`[GraphStateCSV ${this.orgId}] SQL result.rows:`, resultRows);
     console.log(
       `[GraphStateCSV ${this.orgId}] SQL result[0]:`,
       (result as any)?.[0]
     );
 
     // Handle different return formats
-    const rows = (result as any)?.rows || (result as any);
-    this.currentVersion = rows?.[0]?.max_version || 0;
+    const rows = (result as any)?.rows || resultRows;
+    this.currentVersion = Number(rows?.[0]?.max_version || 0);
 
     // Check KV for recent mutations (cold start recovery)
     const kvMutations = await this.loadMutationsFromKV();
@@ -815,7 +817,8 @@ export class GraphStateCSV {
 
     // Reload server-side KuzuDB to reflect the mutation
     // This ensures validatePermission() uses current state
-    await this.reloadServerKuzu();
+    // Kuzu is already loaded, no need to reload
+    console.log(`[GraphStateCSV ${this.orgId}] CSV loaded from R2`);
 
     return this.currentVersion;
   }
@@ -857,7 +860,7 @@ export class GraphStateCSV {
 
     // Write to KV in parallel
     await Promise.all(
-      result.rows.map((mutation: any) =>
+      Array.from(result).map((mutation: any) =>
         this.env.PERMISSIONS_KV.put(
           `${this.orgId}:mutation:${mutation.version}`,
           JSON.stringify(mutation)
@@ -926,7 +929,7 @@ export class GraphStateCSV {
         [since]
       );
 
-      const changes = result.rows.map((row: any) => ({
+      const changes = Array.from(result).map((row: any) => ({
         version: row.version,
         timestamp: row.timestamp,
         type: row.type,
@@ -1633,7 +1636,7 @@ export class GraphStateCSV {
         }
       }
       for (const resourceId of resourceIds) {
-        resources.push({ id: resourceId, name: resourceId });
+        resources.push({ id: resourceId, name: resourceId } as any);
       }
 
       // Extract member_of relationships

@@ -25,7 +25,7 @@ export interface Edge {
   revokedAt?: number;
 }
 
-export type EdgeType = "MEMBER_OF" | "INHERITS_FROM" | "HAS_PERMISSION";
+export type EdgeType = "MEMBER_OF" | "INHERITS_FROM" | "HAS_PERMISSION" | "TEST";
 
 export interface CreateEdgeInput {
   type: EdgeType;

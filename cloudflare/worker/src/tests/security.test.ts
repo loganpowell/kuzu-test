@@ -16,7 +16,9 @@ describe("Edge-Based Permission Security", () => {
 
   beforeEach(() => {
     // Setup fresh instances for each test
-    graphDO = new GraphStateDO();
+    const mockState = {} as any;
+    const mockEnv = {} as any;
+    graphDO = new GraphStateDO(mockState, mockEnv);
     auditLogger = new AuditLogger();
   });
 
@@ -36,7 +38,7 @@ describe("Edge-Based Permission Security", () => {
       expect(result.valid).toBe(false);
       expect(result.reason).toContain("does not exist");
       // Note: This is logged as DENIED, not ATTACK_DETECTED (no broken chain)
-      expect(auditLogger.getLastEvent().result).toBe("DENIED");
+      expect(auditLogger.getLastEvent()!.result).toBe('DENIED');
     });
 
     it("should only accept server-generated UUIDs", async () => {
@@ -117,7 +119,7 @@ describe("Edge-Based Permission Security", () => {
       expect(result.reason!.toLowerCase()).toContain("broken");
       expect(result.brokenChainAt).toBe(0); // Break between edge1 and edge2
       expect(auditLogger.hasEvent("ATTACK_DETECTED")).toBe(true);
-      expect(auditLogger.getLastEvent().attackType).toBe(
+      expect(auditLogger.getLastEvent()!.attackType).toBe(
         "DISCONNECTED_EDGE_CHAIN"
       );
     });
@@ -256,8 +258,8 @@ describe("Edge-Based Permission Security", () => {
       });
 
       expect(result.valid).toBe(true);
-      expect(auditLogger.getLastEvent().checkType).toBe("EDGE_VALIDATION");
-      expect(auditLogger.getLastEvent().edgeIds).toEqual(
+      expect(auditLogger.getLastEvent()!.checkType).toBe('EDGE_VALIDATION');
+      expect(auditLogger.getLastEvent()!.edgeIds).toEqual(
         edges.map((e) => e.id)
       );
     });
@@ -321,7 +323,7 @@ describe("Edge-Based Permission Security", () => {
         auditLogger,
       });
 
-      const auditEvent = auditLogger.getLastEvent();
+      const auditEvent = auditLogger.getLastEvent()!;
       expect(auditEvent.eventType).toBe("PERMISSION_CHECK");
       expect(auditEvent.userId).toBe("user-123");
       expect(auditEvent.resourceId).toBe("doc-456");
@@ -341,7 +343,7 @@ describe("Edge-Based Permission Security", () => {
         auditLogger,
       });
 
-      const auditEvent = auditLogger.getLastEvent();
+      const auditEvent = auditLogger.getLastEvent()!;
       expect(auditEvent.result).toBe("DENIED");
       expect(auditEvent.invalidEdgeId).toBe("fake-id");
       expect(auditEvent.reason).toContain("does not exist");
@@ -370,7 +372,7 @@ describe("Edge-Based Permission Security", () => {
         auditLogger,
       });
 
-      const auditEvent = auditLogger.getLastEvent();
+      const auditEvent = auditLogger.getLastEvent()!;
       expect(auditEvent.eventType).toBe("ATTACK_DETECTED");
       expect(auditEvent.attackType).toBe("DISCONNECTED_EDGE_CHAIN");
       expect(auditEvent.brokenChainAt).toBe(0);
@@ -464,7 +466,7 @@ describe("Edge-Based Permission Security", () => {
 
       // ATTACK: Try mutation without proof
       await expect(
-        graphDO.applyMutation(mutation, { proof: null })
+        graphDO.applyMutation(mutation, null)
       ).rejects.toThrow("Proof required");
     });
 
@@ -529,10 +531,10 @@ describe("Edge-Based Permission Security", () => {
       // Edge should still exist but be marked revoked
       const revokedEdge = await graphDO.getEdge(edge.id);
       expect(revokedEdge).toBeDefined();
-      expect(revokedEdge.id).toBe(edge.id);
-      expect(revokedEdge.createdAt).toBe(createdAt);
-      expect(revokedEdge.revokedAt).toBeDefined();
-      expect(revokedEdge.revokedAt).toBeGreaterThan(createdAt);
+      expect(revokedEdge!.id).toBe(edge.id);
+      expect(revokedEdge!.createdAt).toBe(createdAt);
+      expect(revokedEdge!.revokedAt).toBeDefined();
+      expect(revokedEdge!.revokedAt).toBeGreaterThan(createdAt);
     });
 
     it("should support audit trail reconstruction", async () => {

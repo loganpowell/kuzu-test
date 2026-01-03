@@ -1,7 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 import { Edge, CreateEdgeInput, ValidationResult } from "../types/edge";
 import { randomUUID } from "crypto";
-
+interface Env {
+  // Define your environment bindings here
+}
 /**
  * Graph State Durable Object
  * Stores permission edges in-memory with O(1) lookups
