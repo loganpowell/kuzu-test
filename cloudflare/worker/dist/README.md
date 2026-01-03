@@ -1,1 +1,1 @@
-This folder contains the built output assets for the worker "kuzu-auth-dev-worker-v2" generated at 2025-12-29T23:49:15.811Z.
+This folder contains the built output assets for the worker "kuzu-auth-dev-worker-v2" generated at 2025-12-30T00:48:15.172Z.

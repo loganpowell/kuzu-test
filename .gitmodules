@@ -1,3 +1,0 @@
-[submodule "cloudflare/kuzu-cf-build"]
-	path = cloudflare/kuzu-cf-build
-	url = https://github.com/loganpowell/kuzu

@@ -19,10 +19,8 @@
     "benchmark:light": "tsx tests/benchmark-stress.ts --scenario=light",
     "benchmark:medium": "tsx tests/benchmark-stress.ts --scenario=medium",
     "benchmark:heavy": "tsx tests/benchmark-stress.ts --scenario=heavy",
-    "benchmark:all": "tsx tests/benchmark-stress.ts --scenario=full"
-  },
-  "dependencies": {
-    "kuzu-wasm": "^0.11.3"
+    "benchmark:all": "tsx tests/benchmark-stress.ts --scenario=full",
+    "test:validation": "tsx tests/test-server-validation.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
@@ -35,5 +33,9 @@
     "vitest": "^1.1.0",
     "wrangler": "^4.54.0",
     "ws": "^8.18.0"
+  },
+  "dependencies": {
+    "@kuzu/kuzu-wasm": "^0.7.0",
+    "kuzu-wasm-cf": "file:./node_modules/kuzu-wasm-cf"
   }
 }
