@@ -111,13 +111,14 @@ See [Deployment Guide](./docs/deployment/DEPLOY.md) for full instructions.
 
 Through extensive benchmarking, we found CSV to be **30-40% faster** than JSON for KuzuDB loading:
 
-| Format | Load Time (10K users) | Size | Parse Speed |
-|--------|----------------------|------|-------------|
-| CSV    | ~50ms               | 61 KB | **40% faster** |
-| JSON   | ~85ms               | 142 KB | Baseline |
-| Parquet| ~45ms               | 52 KB | 45% faster |
+| Format  | Load Time (10K users) | Size   | Parse Speed    |
+| ------- | --------------------- | ------ | -------------- |
+| CSV     | ~50ms                 | 61 KB  | **40% faster** |
+| JSON    | ~85ms                 | 142 KB | Baseline       |
+| Parquet | ~45ms                 | 52 KB  | 45% faster     |
 
 **Decision:** CSV chosen for production
+
 - ✅ Faster than JSON (30-40% improvement)
 - ✅ Human-readable (debugging, auditing)
 - ✅ KuzuDB native format (optimized loader)
@@ -125,6 +126,7 @@ Through extensive benchmarking, we found CSV to be **30-40% faster** than JSON f
 - ⚠️ Parquet slightly faster but binary format
 
 **JSON still used for:**
+
 - WebSocket protocol messages
 - HTTP API requests/responses
 - Mutation log in KV store
@@ -146,14 +148,16 @@ cd benchmarks/nodejs && node benchmark_loading.js
 ```
 
 **Data directories:**
+
 - `data/csv/` - Production format (used by system)
 - `data/json/` - Legacy format (benchmark comparison only)
-- `data/parquet/` - Experimental format (not used) ├── python/                    # Python benchmarks
-│   ├── nodejs/                    # Node.js benchmarks
-│   └── wasm/                      # WASM browser benchmarks
-├── client/                        # Client implementation
-└── generators/                    # Test data generation
-```
+- `data/parquet/` - Experimental format (not used) ├── python/ # Python benchmarks
+  │ ├── nodejs/ # Node.js benchmarks
+  │ └── wasm/ # WASM browser benchmarks
+  ├── client/ # Client implementation
+  └── generators/ # Test data generation
+
+````
 
 ## Benchmarks (Legacy)
 
@@ -175,7 +179,7 @@ node benchmark_queries.js
 cd benchmarks/wasm
 python server.py
 # Then open http://localhost:8080/benchmarks/wasm/
-```
+````
 
 ## License
 

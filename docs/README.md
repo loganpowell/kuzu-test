@@ -5,15 +5,18 @@ This directory contains all project documentation, organized by topic.
 ## 🎯 Quick Navigation
 
 ### For New Team Members
+
 1. **Start here:** [Architecture Overview](./ARCHITECTURE.md) ⭐
 2. Read: [Security Architecture](./security/SECURITY_ARCHITECTURE_CONCISE.md)
 3. Try: [Full Stack Examples](./security/FULL_STACK_EXAMPLE_COMPLETE.md)
 4. Develop: [TDD Quick Start](./security/QUICKSTART_TDD.md)
 
 ### For Deployment
+
 - [Cloudflare Deployment Guide](./deployment/DEPLOY.md)
 
 ### For Development
+
 - [TDD Implementation](./security/TDD_IMPLEMENTATION_SUMMARY.md)
 - [Security Tests](./security/QUICKSTART_TDD.md)
 
@@ -24,9 +27,11 @@ This directory contains all project documentation, organized by topic.
 ### Core Architecture
 
 #### [`ARCHITECTURE.md`](./ARCHITECTURE.md) ⭐ **START HERE**
+
 **Complete system architecture and design decisions**
 
 Comprehensive architectural overview covering:
+
 - **Design Principles**: Client-side queries, server validation, CSV storage
 - **Architecture Diagrams**: Persistence loop, WebSocket synchronization
 - **Data Format Decisions**: Why CSV over JSON (30-40% faster, benchmarked)
@@ -47,6 +52,7 @@ Comprehensive architectural overview covering:
 #### [`security/`](./security/)
 
 ##### [`SECURITY_ARCHITECTURE_CONCISE.md`](./security/SECURITY_ARCHITECTURE_CONCISE.md)
+
 **Edge-based validation security model**
 
 - Edge-based validation principles
@@ -55,6 +61,7 @@ Comprehensive architectural overview covering:
 - Audit trail implementation
 
 ##### [`FULL_STACK_EXAMPLE_COMPLETE.md`](./security/FULL_STACK_EXAMPLE_COMPLETE.md)
+
 **Complete E2E authorization examples**
 
 - 15 E2E test scenarios
@@ -64,6 +71,7 @@ Comprehensive architectural overview covering:
 - Attack prevention examples
 
 ##### [`TDD_IMPLEMENTATION_SUMMARY.md`](./security/TDD_IMPLEMENTATION_SUMMARY.md)
+
 **Test-driven development approach**
 
 - 20 security unit tests
@@ -71,6 +79,7 @@ Comprehensive architectural overview covering:
 - Test coverage report
 
 ##### [`QUICKSTART_TDD.md`](./security/QUICKSTART_TDD.md)
+
 **Developer quick start guide**
 
 - Running tests
@@ -84,6 +93,7 @@ Comprehensive architectural overview covering:
 #### [`deployment/`](./deployment/)
 
 ##### [`DEPLOY.md`](./deployment/DEPLOY.md)
+
 **Cloudflare deployment instructions**
 
 - Infrastructure setup
@@ -124,26 +134,31 @@ Historical and outdated documentation preserved for reference:
 ### By Role
 
 **👨‍💼 Product Manager / Architect**
+
 1. [ARCHITECTURE.md](./ARCHITECTURE.md) - System overview
 2. [FULL_STACK_EXAMPLE_COMPLETE.md](./security/FULL_STACK_EXAMPLE_COMPLETE.md) - See it working
 3. [DEPLOY.md](./deployment/DEPLOY.md) - Infrastructure requirements
 
 **👩‍💻 Backend Developer**
+
 1. [ARCHITECTURE.md](./ARCHITECTURE.md) - Understanding the system
 2. [SECURITY_ARCHITECTURE_CONCISE.md](./security/SECURITY_ARCHITECTURE_CONCISE.md) - Security model
 3. [TDD_IMPLEMENTATION_SUMMARY.md](./security/TDD_IMPLEMENTATION_SUMMARY.md) - Test approach
 4. [QUICKSTART_TDD.md](./security/QUICKSTART_TDD.md) - Start developing
 
 **🔐 Security Engineer**
+
 1. [SECURITY_ARCHITECTURE_CONCISE.md](./security/SECURITY_ARCHITECTURE_CONCISE.md) - Security model
 2. [ARCHITECTURE.md](./ARCHITECTURE.md) - Attack prevention details
 3. [FULL_STACK_EXAMPLE_COMPLETE.md](./security/FULL_STACK_EXAMPLE_COMPLETE.md) - Attack scenarios
 
 **☁️ DevOps / SRE**
+
 1. [DEPLOY.md](./deployment/DEPLOY.md) - Deployment guide
 2. [ARCHITECTURE.md](./ARCHITECTURE.md) - Infrastructure overview
 
 **🧪 QA / Test Engineer**
+
 1. [QUICKSTART_TDD.md](./security/QUICKSTART_TDD.md) - Running tests
 2. [TDD_IMPLEMENTATION_SUMMARY.md](./security/TDD_IMPLEMENTATION_SUMMARY.md) - Test coverage
 3. [FULL_STACK_EXAMPLE_COMPLETE.md](./security/FULL_STACK_EXAMPLE_COMPLETE.md) - Test scenarios
@@ -169,12 +184,12 @@ Historical and outdated documentation preserved for reference:
 
 ## 🔄 Documentation Status
 
-| Document | Status | Last Updated |
-|----------|--------|--------------|
-| ARCHITECTURE.md | ✅ Current | Jan 4, 2026 |
-| security/* | ✅ Current | Jan 4, 2026 |
-| deployment/DEPLOY.md | ✅ Current | Dec 2025 |
-| archive/* | 🗄️ Archive | Various |
+| Document             | Status     | Last Updated |
+| -------------------- | ---------- | ------------ |
+| ARCHITECTURE.md      | ✅ Current | Jan 4, 2026  |
+| security/\*          | ✅ Current | Jan 4, 2026  |
+| deployment/DEPLOY.md | ✅ Current | Dec 2025     |
+| archive/\*           | 🗄️ Archive | Various      |
 
 ---
 
@@ -213,6 +228,7 @@ Storage (Cloudflare R2 + KV)
 ```
 
 **Key Metrics:**
+
 - Authorization: <1ms (client-side)
 - Validation: 2-10ms (server-side)
 - Sync: 10-50ms (WebSocket)
