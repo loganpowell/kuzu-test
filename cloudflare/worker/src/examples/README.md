@@ -336,9 +336,9 @@ npm run example:docs
 
 ## 📚 Related Documentation
 
-- [TDD Implementation Summary](../../../docs/security/TDD_IMPLEMENTATION_SUMMARY.md)
-- [Security Architecture](../../../docs/security/SECURITY_ARCHITECTURE_CONCISE.md)
-- [Quick Start Guide](../../../docs/security/QUICKSTART_TDD.md)
+- [TDD Implementation Summary](../../../../docs/security/TDD_IMPLEMENTATION_SUMMARY.md)
+- [Security Architecture](../../../../docs/security/SECURITY_ARCHITECTURE_CONCISE.md)
+- [Quick Start Guide](../../../../docs/security/QUICKSTART_TDD.md)
 
 ## 💡 Building Your Own Examples
 
