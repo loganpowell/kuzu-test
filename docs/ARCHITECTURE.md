@@ -391,8 +391,648 @@ Size: 61 bytes
 
 ---
 
-## 🔐 Security Model
+## 🔄 Data Model Design: Current State and Future Evolution
 
+This section documents our schema management approach: where we are today and where we're headed.
+
+### Current State: Manual Typed Files
+
+**Structure:**
+
+```
+Separate CSV files by entity/relationship type:
+├── users.csv          (User entities)
+├── groups.csv         (Group entities)
+├── resources.csv      (Resource entities)
+├── member_of.csv      (User → Group relationships)
+├── inherits_from.csv  (Group → Group relationships)
+├── user_permissions.csv   (User → Resource + capabilities)
+└── group_permissions.csv  (Group → Resource + capabilities)
+```
+
+**Data Example:**
+
+```csv
+# users.csv
+id,name,email,created_at,updated_at,is_active,metadata
+user:alice,Alice Smith,alice@example.com,2026-01-01,2026-01-01,true,{}
+
+# member_of.csv
+user_id,group_id
+user:alice,group:engineering
+
+# user_permissions.csv
+user_id,resource_id,can_create,can_read,can_update,can_delete,granted_at,granted_by
+user:alice,resource:docs,false,true,true,false,2026-01-01,user:admin
+```
+
+**Pros:**
+
+- ✅ **Type Safety**: Schema validation per entity type
+- ✅ **Query Performance**: Type-specific indexes (users by email, resources by owner)
+- ✅ **Data Validation**: Enforced column structure per file
+- ✅ **Readable**: Clear separation of concerns
+- ✅ **Optimized Loading**: KuzuDB can parallelize loading different node types
+- ✅ **SQL-Like**: Familiar to developers with RDBMS background
+- ✅ **Efficient Storage**: No redundant type field in every row
+
+**Cons:**
+
+- ❌ **Schema Rigidity**: Adding new entity types requires code changes
+- ❌ **Admin Friction**: Can't dynamically add new node/edge types  
+- ❌ **Developer Dependency**: 2-4 hours (dev + test + deploy) for new types
+- ❌ **Schema Migrations**: Changing structure requires coordinated updates
+
+**Current Admin Flow for Adding New Types:**
+
+```typescript
+// Admin wants to add "Department" entity type
+
+// Current flow (Developer-required):
+1. Contact developer
+2. Developer creates departments.csv schema
+3. Developer updates loader: loadDepartments()
+4. Developer updates GraphStateDO with department indexes
+5. Developer writes migration for existing data
+6. QA tests new entity type
+7. Deploy to production
+8. Admin can now create departments
+
+// Estimated time: 2-4 hours
+// Admin capability: None (fully developer-dependent)
+```
+
+---
+
+### Future Evolution: Schema-Driven Typed Files
+
+**Key Insight:** Define types declaratively in a schema file, auto-generate typed implementation.
+
+Rather than hand-coding each entity type, define the schema in a configuration file (`schema.yaml`) and auto-generate the typed CSV files, loaders, validators, and indexes.
+
+**Structure:**
+
+```yaml
+# schema.yaml - Single source of truth
+entities:
+  User:
+    fields:
+      - name: id
+        type: string
+        required: true
+        unique: true
+        pattern: "^user:"
+      - name: name
+        type: string
+        required: true
+        maxLength: 255
+      - name: email
+        type: string
+        required: true
+        unique: true
+        format: email
+      - name: created_at
+        type: timestamp
+        required: true
+        default: now
+      - name: is_active
+        type: boolean
+        required: true
+        default: true
+      - name: metadata
+        type: json
+        default: {}
+    indexes:
+      - fields: [email]
+        unique: true
+      - fields: [name]
+
+  Group:
+    fields:
+      - name: id
+        type: string
+        required: true
+        unique: true
+        pattern: "^group:"
+      - name: name
+        type: string
+        required: true
+      - name: description
+        type: string
+      - name: created_at
+        type: timestamp
+        required: true
+      - name: is_active
+        type: boolean
+        default: true
+    indexes:
+      - fields: [name]
+
+  # Admin adds new type via UI or API:
+  Department:
+    fields:
+      - name: id
+        type: string
+        required: true
+        pattern: "^dept:"
+      - name: name
+        type: string
+        required: true
+      - name: budget
+        type: number
+      - name: head_id
+        type: string
+        format: user_reference
+    indexes:
+      - fields: [head_id]
+
+relationships:
+  member_of:
+    from: User
+    to: Group
+    fields:
+      - name: joined_at
+        type: timestamp
+        default: now
+
+  permission:
+    from: [User, Group] # Union type
+    to: Resource
+    fields:
+      - name: can_create
+        type: boolean
+        default: false
+      - name: can_read
+        type: boolean
+        default: false
+      - name: can_update
+        type: boolean
+        default: false
+      - name: can_delete
+        type: boolean
+        default: false
+      - name: granted_at
+        type: timestamp
+      - name: granted_by
+        type: string
+
+  # Admin adds new relationship:
+  manages:
+    from: User
+    to: Department
+    fields:
+      - name: since
+        type: timestamp
+```
+
+**Schema Compiler Flow:**
+
+```typescript
+// 1. Admin updates schema (via UI or direct edit)
+await schemaService.addEntity({
+  name: "Department",
+  fields: [
+    { name: "id", type: "string", required: true, pattern: "^dept:" },
+    { name: "name", type: "string", required: true },
+    { name: "budget", type: "number" },
+  ],
+});
+
+// 2. Schema compiler generates artifacts
+const artifacts = await compileSchema("schema.yaml");
+/*
+Generated:
+├── generated/
+│   ├── departments.csv.schema       (CSV header definition)
+│   ├── loaders/department-loader.ts (Type-safe loader)
+│   ├── validators/department.ts     (Validation logic)
+│   ├── types/department.ts          (TypeScript types)
+│   └── indexes/department-index.ts  (Index definitions)
+*/
+
+// 3. Runtime hot-reload (no deploy needed)
+await graphStateDO.reloadSchema(artifacts);
+await graphStateDO.rebuildIndexes(["Department"]);
+
+// 4. Admin can immediately create departments
+await client.createNode({
+  type: "Department",
+  id: "dept:engineering",
+  name: "Engineering",
+  budget: 1000000,
+});
+```
+
+**Generated Artifacts Example:**
+
+```typescript
+// generated/types/department.ts (auto-generated)
+export interface Department {
+  id: string; // pattern: ^dept:
+  name: string; // required
+  budget?: number; // optional
+  created_at: Date; // auto-generated
+  metadata: object; // default: {}
+}
+
+// generated/validators/department.ts (auto-generated)
+export function validateDepartment(data: unknown): Department {
+  if (!data || typeof data !== "object") {
+    throw new ValidationError("Invalid department object");
+  }
+
+  const d = data as any;
+
+  // Validate id
+  if (!d.id || typeof d.id !== "string") {
+    throw new ValidationError("Department.id is required");
+  }
+  if (!/^dept:/.test(d.id)) {
+    throw new ValidationError("Department.id must match pattern ^dept:");
+  }
+
+  // Validate name
+  if (!d.name || typeof d.name !== "string") {
+    throw new ValidationError("Department.name is required");
+  }
+
+  // Validate budget (optional)
+  if (d.budget !== undefined && typeof d.budget !== "number") {
+    throw new ValidationError("Department.budget must be a number");
+  }
+
+  return {
+    id: d.id,
+    name: d.name,
+    budget: d.budget,
+    created_at: d.created_at || new Date(),
+    metadata: d.metadata || {},
+  };
+}
+
+// generated/loaders/department-loader.ts (auto-generated)
+export async function loadDepartments(
+  csvData: string,
+  connection: KuzuConnection
+): Promise<void> {
+  // Parse CSV
+  const rows = parseCSV(csvData);
+
+  // Validate each row
+  for (const row of rows) {
+    validateDepartment(row);
+  }
+
+  // Create table
+  await connection.query(`
+    CREATE NODE TABLE IF NOT EXISTS Department(
+      id STRING PRIMARY KEY,
+      name STRING,
+      budget DOUBLE,
+      created_at TIMESTAMP,
+      metadata JSON
+    )
+  `);
+
+  // Load data
+  await connection.query(`
+    COPY Department FROM 'departments.csv'
+  `);
+
+  // Create indexes
+  await connection.query(`
+    CREATE INDEX ON Department(name)
+  `);
+}
+```
+
+**Admin UX Flow:**
+
+```typescript
+// Admin wants to add "Department" entity type
+
+// New flow (Self-Service with Schema UI):
+1. Admin: Settings → Schema → Add Entity Type
+2. Form:
+   - Entity name: "Department"
+   - Add field: "id" (string, required, pattern: ^dept:)
+   - Add field: "name" (string, required)
+   - Add field: "budget" (number, optional)
+   - Add field: "head" (reference → User)
+3. Click "Save Schema"
+4. System compiles schema → generates typed artifacts
+5. System hot-reloads artifacts (no deploy!)
+6. Admin can immediately create departments
+
+// Estimated time: 2-3 minutes (no developer needed)
+```
+
+**Pros:**
+
+- ✅ **Admin Self-Service**: Add types via UI without code changes
+- ✅ **Type Safety**: Generated TypeScript types + validation
+- ✅ **Performance**: Typed CSV files + indexes (same as manual)
+- ✅ **Hot Reload**: No deployment needed for schema changes
+- ✅ **Version Control**: Schema changes tracked in git
+- ✅ **Compile-Time Validation**: Schema compiler catches errors early
+- ✅ **Documentation**: Schema file is self-documenting
+- ✅ **Tooling**: Can generate GraphQL, REST API, UI forms from schema
+
+**Cons:**
+
+- ⚠️ **Schema Compiler Complexity**: Need to build/maintain compiler
+- ⚠️ **Schema Migration**: Changes require data migration
+- ⚠️ **Hot Reload Complexity**: Need to reload WASM in clients
+- ⚠️ **Schema Validation**: Need to prevent breaking changes
+- ⚠️ **Downtime Risk**: Schema changes might require restart
+
+**Comparison: Current vs Future State**
+
+| Aspect                 | Current (Manual)      | Future (Schema-Driven)    |
+| ---------------------- | --------------------- | ------------------------- |
+| Add new entity         | 2-4 hours (dev cycle) | 2-3 minutes (admin UI)    |
+| Type safety            | ✅ Hand-written       | ✅ Auto-generated         |
+| Query performance      | ⭐⭐⭐⭐⭐ 0.5ms       | ⭐⭐⭐⭐⭐ 0.5ms           |
+| Storage efficiency     | ⭐⭐⭐⭐⭐ Optimal     | ⭐⭐⭐⭐⭐ Optimal         |
+| Schema changes         | Code deploy           | Hot reload                |
+| Admin empowerment      | ❌ Dev required       | ✅ Self-service           |
+| Validation             | ✅ Hand-written       | ✅ Auto-generated         |
+| Development complexity | ⭐⭐⭐⭐ Simple        | ⭐⭐⭐ Need compiler       |
+| Runtime complexity     | ⭐⭐⭐⭐ Simple        | ⭐⭐⭐ Hot reload          |
+
+**Real-World Examples:**
+
+This pattern is used by:
+
+- **Prisma**: Schema file → TypeScript types + SQL migrations + client
+- **TypeORM**: Decorators → Database schema + migrations
+- **GraphQL Code Generator**: GraphQL schema → TypeScript types + resolvers
+- **Hasura**: GraphQL schema → PostgreSQL tables + permissions
+- **Supabase**: Database schema → REST API + TypeScript client
+- **Payload CMS**: Config file → Admin UI + API + validation
+
+**Schema Evolution Example:**
+
+```yaml
+# schema.yaml (v1 - initial)
+entities:
+  User:
+    fields:
+      - name: id
+        type: string
+      - name: name
+        type: string
+      - name: email
+        type: string
+
+# schema.yaml (v2 - admin adds Department)
+entities:
+  User:
+    fields:
+      - name: id
+        type: string
+      - name: name
+        type: string
+      - name: email
+        type: string
+
+  Department:  # New entity!
+    fields:
+      - name: id
+        type: string
+      - name: name
+        type: string
+      - name: budget
+        type: number
+
+relationships:
+  works_in:  # New relationship!
+    from: User
+    to: Department
+
+# Migration automatically generated:
+# 1. Create departments.csv
+# 2. Create works_in.csv
+# 3. Generate Department loader
+# 4. Add Department to graph schema
+# 5. Build Department indexes
+```
+
+**Implementation Phases:**
+
+**Phase 1: Schema Definition**
+
+- Create `schema.yaml` format specification
+- Build schema parser and validator
+- Version control schema file
+
+**Phase 2: Schema Compiler**
+
+- Generate TypeScript types from schema
+- Generate CSV schemas (headers)
+- Generate validation logic
+- Generate loader functions
+
+**Phase 3: Hot Reload**
+
+- Implement runtime schema loading
+- Rebuild indexes on schema change
+- Notify clients of schema updates (WebSocket)
+- Client-side WASM reload
+
+**Phase 4: Admin UI**
+
+- Schema editor interface
+- Visual schema builder (drag-and-drop)
+- Field type picker
+- Validation rule builder
+- Preview generated artifacts
+
+**Phase 5: Migration Tools**
+
+- Schema diff generator
+- Data migration scripts
+- Backwards compatibility checks
+- Rollback capability
+
+---
+
+### Why Schema-Driven Approach?
+
+**Goal:** Enable admin self-service while maintaining typed file performance benefits.
+
+Use a **schema definition file** (`schema.yaml`) as the single source of truth, with a **schema compiler** that generates:
+
+- CSV file schemas
+- TypeScript types
+- Validation logic
+- Loader functions
+- Index definitions
+
+**Benefits:**
+
+- ✅ **Same Performance**: Generates typed files with same 0.5ms query speed
+- ✅ **Admin Self-Service**: 2 minutes vs 2-4 hours for new entity types
+- ✅ **Type Safety**: Auto-generated TypeScript types and validators
+- ✅ **Storage Efficiency**: Same optimal CSV format
+- ✅ **Version Control**: Schema changes tracked in git
+- ✅ **Hot Reload**: No deployment needed for schema changes
+
+**New Admin Flow (Self-Service):**
+
+1. Open Admin UI → Schema → Add Entity
+2. Enter: "Department" with fields (name, budget, head)
+3. Click Save → Schema compiler runs
+4. System hot-reloads new type (no deploy!)
+5. Departments immediately available
+
+**Time savings: 2-4 hours → 2 minutes** 🎯
+
+---
+
+### Implementation Strategy
+
+**Short-term (Current):** Keep manual typed files (User, Group, Resource) while building schema compiler infrastructure.
+
+**Mid-term (Next Quarter):**
+
+1. Implement schema.yaml format
+2. Build schema compiler (generate types, loaders, validators)
+3. Migrate existing entities to schema-driven approach
+4. Add hot-reload capability
+
+**Long-term (6+ months):**
+
+1. Build admin UI for schema management
+2. Implement data migration tools
+3. Add schema versioning and rollback
+4. Generate GraphQL/REST APIs from schema
+
+### Schema Example for Your Use Case
+
+```yaml
+# schema.yaml
+version: "1.0"
+name: "Authorization Graph Schema"
+description: "Multi-tenant authorization system with extensible entity types"
+
+# Core entities (always present)
+entities:
+  User:
+    description: "Human or service account"
+    fields:
+      - { name: id, type: string, required: true, pattern: "^user:" }
+      - { name: name, type: string, required: true, maxLength: 255 }
+      - {
+          name: email,
+          type: string,
+          required: true,
+          format: email,
+          unique: true,
+        }
+      - { name: created_at, type: timestamp, default: now }
+      - { name: is_active, type: boolean, default: true }
+      - { name: metadata, type: json, default: {} }
+    indexes:
+      - { fields: [email], unique: true }
+      - { fields: [name] }
+
+  Group:
+    description: "Collection of users with inherited permissions"
+    fields:
+      - { name: id, type: string, required: true, pattern: "^group:" }
+      - { name: name, type: string, required: true }
+      - { name: description, type: string }
+      - { name: created_at, type: timestamp, default: now }
+      - { name: is_active, type: boolean, default: true }
+    indexes:
+      - { fields: [name] }
+
+  Resource:
+    description: "Protected object requiring permissions"
+    fields:
+      - { name: id, type: string, required: true, pattern: "^resource:" }
+      - { name: name, type: string, required: true }
+      - { name: type, type: string, required: true }
+      - { name: owner, type: string, format: user_reference }
+      - { name: created_at, type: timestamp, default: now }
+    indexes:
+      - { fields: [owner] }
+      - { fields: [type, name] }
+
+  # Extensible entities (admin-defined)
+  # These would be added via Admin UI:
+  Department:
+    description: "Organizational department (added by admin)"
+    fields:
+      - { name: id, type: string, required: true, pattern: "^dept:" }
+      - { name: name, type: string, required: true }
+      - { name: budget, type: number, min: 0 }
+      - { name: head_id, type: string, format: user_reference }
+    indexes:
+      - { fields: [head_id] }
+      - { fields: [name], unique: true }
+
+  Project:
+    description: "Project entity (added by admin)"
+    fields:
+      - { name: id, type: string, required: true, pattern: "^proj:" }
+      - { name: name, type: string, required: true }
+      - { name: deadline, type: date }
+      - { name: status, type: enum, values: [planning, active, completed] }
+    indexes:
+      - { fields: [status] }
+
+# Core relationships
+relationships:
+  member_of:
+    description: "User belongs to Group"
+    from: User
+    to: Group
+    fields:
+      - { name: joined_at, type: timestamp, default: now }
+
+  inherits_from:
+    description: "Group inherits permissions from parent Group"
+    from: Group
+    to: Group
+    fields:
+      - { name: created_at, type: timestamp, default: now }
+
+  permission:
+    description: "User or Group has permissions on Resource"
+    from: [User, Group]
+    to: Resource
+    fields:
+      - { name: can_create, type: boolean, default: false }
+      - { name: can_read, type: boolean, default: false }
+      - { name: can_update, type: boolean, default: false }
+      - { name: can_delete, type: boolean, default: false }
+      - { name: granted_at, type: timestamp, required: true }
+      - { name: granted_by, type: string, format: user_reference }
+
+  # Extensible relationships (admin-defined)
+  manages:
+    description: "User manages Department (added by admin)"
+    from: User
+    to: Department
+    fields:
+      - { name: since, type: timestamp, default: now }
+
+  assigned_to:
+    description: "User assigned to Project (added by admin)"
+    from: User
+    to: Project
+    fields:
+      - { name: role, type: string }
+      - { name: allocation, type: number, min: 0, max: 100 } # percentage
+```
+
+This schema-driven approach gives you **admin flexibility** with **typed performance** and **type safety**. Best of all worlds! 🎯
+
+---
+
+## 🔐 Security Model
 ### Edge-Based Validation
 
 **Why edges instead of simple permission checks?**
