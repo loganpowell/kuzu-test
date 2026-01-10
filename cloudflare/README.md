@@ -13,7 +13,7 @@ Secure authorization system using edge-based validation with Cloudflare Workers 
 
 - **[Security Architecture](../docs/security/SECURITY_ARCHITECTURE_CONCISE.md)** - Edge-based validation design
 - **[TDD Quick Start](../docs/security/QUICKSTART_TDD.md)** - Running security tests
-- **[TDD Implementation](../docs/security/TDD_SUCCESS.md)** - Complete test coverage
+- **[TDD Implementation](../docs/multi-tenant-migration/TDD_SUCCESS.md)** - Complete test coverage
 - **[Deployment Guide](../docs/deployment/DEPLOY.md)** - How to deploy
 - **[Build Status](../docs/development/BUILD_STATUS.md)** - Current build status
 
@@ -117,22 +117,26 @@ Test Files  1 passed (1)
 ## Next Steps
 
 1. ✅ **Phase 0: TDD Foundation** (Complete)
+
    - All security tests passing
    - Edge storage implemented
    - Chain validation working
    - Audit logging operational
 
 2. 🔄 **Phase 1: Integration** (Week 1)
+
    - Integrate with existing worker
    - Add RPC endpoints for edge CRUD
    - Connect to WebSocket infrastructure
 
 3. 📋 **Phase 2: Client Integration** (Week 2)
+
    - Client-side Kuzu edge ID queries
    - Submit edge IDs to server
    - Handle validation responses
 
 4. 💾 **Phase 3: CSV Sync** (Week 3)
+
    - Export edges to CSV
    - Store in KV (current + 10 versions)
    - Archive to R2 (>10 versions)

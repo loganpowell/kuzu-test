@@ -762,7 +762,7 @@ npm run test:e2e      # 15 E2E tests
 
 **Status:** ✅ 2,300+ lines across 4 documents
 
-#### [ARCHITECTURE.md](ARCHITECTURE.md) (1,940 lines)
+#### [ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md) (1,940 lines)
 
 - **Core Design Principles** - Client-side queries, server validation, CSV canonical state
 - **Architecture Diagrams** - Mermaid diagrams of complete system
@@ -1283,32 +1283,32 @@ schema.yaml → Compiler → Output:
 ### Essential Reading (Start Here)
 
 1. **[README.md](../README.md)** - Project overview, quick start
-2. **[ARCHITECTURE.md](ARCHITECTURE.md)** - Complete system architecture (must read)
+2. **[ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md)** - Complete system architecture (must read)
 3. **[This Document](PROJECT_SUMMARY.md)** - Summary and roadmap
 
 ### By Role
 
 **Product Manager:**
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Core design principles
+- [ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md) - Core design principles
 - [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Current state and roadmap
 - [Full Stack Example](security/FULL_STACK_EXAMPLE_COMPLETE.md) - User stories
 
 **Developer:**
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Complete technical reference
+- [ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md) - Complete technical reference
 - [Development Guide](development/) - Setup and contribution
 - Test files in `cloudflare/worker/src/tests/`
 
 **Security Engineer:**
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Security model section
+- [ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md) - Security model section
 - [Security Examples](security/) - Attack scenarios
 - Test file: `security-implementation.test.ts`
 
 **DevOps:**
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Deployment section
+- [ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md) - Deployment section
 - [Deployment Guide](deployment/) - Infrastructure setup
 
 ### By Task
@@ -1316,23 +1316,23 @@ schema.yaml → Compiler → Output:
 **Understanding the System:**
 
 1. [README.md](../README.md) - 5 min overview
-2. [ARCHITECTURE.md § Core Design Principles](ARCHITECTURE.md#-core-design-principles) - 10 min
-3. [ARCHITECTURE.md § Architecture Diagram](ARCHITECTURE.md#-architecture-diagram) - 15 min
+2. [ARCHITECTURE.md § Core Design Principles](multi-tenant-migration/ARCHITECTURE.md#-core-design-principles) - 10 min
+3. [ARCHITECTURE.md § Architecture Diagram](multi-tenant-migration/ARCHITECTURE.md#-architecture-diagram) - 15 min
 
 **Implementing Features:**
 
-1. [ARCHITECTURE.md § Core Persistence Loop](ARCHITECTURE.md#-core-persistence-loop) - Data flow
+1. [ARCHITECTURE.md § Core Persistence Loop](multi-tenant-migration/ARCHITECTURE.md#-core-persistence-loop) - Data flow
 2. Test files - Working examples
 3. [Full Stack Example](security/FULL_STACK_EXAMPLE_COMPLETE.md) - Complete application
 
 **Adding Entity Types:**
 
-1. [ARCHITECTURE.md § Data Model Design](ARCHITECTURE.md#-data-model-design-current-state-and-future-evolution) - Current and future
+1. [ARCHITECTURE.md § Data Model Design](multi-tenant-migration/ARCHITECTURE.md#-data-model-design-current-state-and-future-evolution) - Current and future
 2. **Phase 1 Roadmap** (above) - Schema-driven approach
 
 **Comparing to Zanzibar:**
 
-1. [ARCHITECTURE.md § Relationship to Google Zanzibar](ARCHITECTURE.md#-relationship-to-google-zanzibar) - Detailed comparison
+1. [ARCHITECTURE.md § Relationship to Google Zanzibar](multi-tenant-migration/ARCHITECTURE.md#-relationship-to-google-zanzibar) - Detailed comparison
 
 ---
 
@@ -1359,7 +1359,7 @@ npm run example:docs    # Document management system
 
 ### Development Workflow
 
-1. Read [ARCHITECTURE.md](ARCHITECTURE.md) to understand the system
+1. Read [ARCHITECTURE.md](multi-tenant-migration/ARCHITECTURE.md) to understand the system
 2. Look at test files for examples
 3. Make changes
 4. Run tests to verify
@@ -1386,7 +1386,7 @@ A: <1ms latency enables instant UI updates. Server validation maintains security
 A: 30-40% faster, simpler, and R2 provides cheap storage. KuzuDB optimized for CSV.
 
 **Q: How does this compare to Zanzibar?**  
-A: Similar concepts (ReBAC, tuples), but client-side for lower latency. See [Zanzibar comparison](ARCHITECTURE.md#-relationship-to-google-zanzibar).
+A: Similar concepts (ReBAC, tuples), but client-side for lower latency. See [Zanzibar comparison](multi-tenant-migration/ARCHITECTURE.md#-relationship-to-google-zanzibar).
 
 **Q: When will schema-driven infrastructure be ready?**  
 A: Phase 1 roadmap estimates 8-12 weeks. See [Next Steps](#phase-1-schema-driven-infrastructure-priority-high) above.

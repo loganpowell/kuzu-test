@@ -6,7 +6,7 @@ This directory contains all project documentation, organized by topic.
 
 ### For New Team Members
 
-1. **Start here:** [Architecture Overview](./ARCHITECTURE.md) ⭐
+1. **Start here:** [Architecture Overview](./multi-tenant-migration/ARCHITECTURE.md) ⭐
 2. Read: [Security Architecture](./security/SECURITY_ARCHITECTURE_CONCISE.md)
 3. Try: [Full Stack Examples](./security/FULL_STACK_EXAMPLE_COMPLETE.md)
 4. Develop: [TDD Quick Start](./security/QUICKSTART_TDD.md)
@@ -26,7 +26,7 @@ This directory contains all project documentation, organized by topic.
 
 ### Core Architecture
 
-#### [`ARCHITECTURE.md`](./ARCHITECTURE.md) ⭐ **START HERE**
+#### [`ARCHITECTURE.md`](./multi-tenant-migration/ARCHITECTURE.md) ⭐ **START HERE**
 
 **Complete system architecture and design decisions**
 
@@ -135,13 +135,13 @@ Historical and outdated documentation preserved for reference:
 
 **👨‍💼 Product Manager / Architect**
 
-1. [ARCHITECTURE.md](./ARCHITECTURE.md) - System overview
+1. [ARCHITECTURE.md](./multi-tenant-migration/ARCHITECTURE.md) - System overview
 2. [FULL_STACK_EXAMPLE_COMPLETE.md](./security/FULL_STACK_EXAMPLE_COMPLETE.md) - See it working
 3. [DEPLOY.md](./deployment/DEPLOY.md) - Infrastructure requirements
 
 **👩‍💻 Backend Developer**
 
-1. [ARCHITECTURE.md](./ARCHITECTURE.md) - Understanding the system
+1. [ARCHITECTURE.md](./multi-tenant-migration/ARCHITECTURE.md) - Understanding the system
 2. [SECURITY_ARCHITECTURE_CONCISE.md](./security/SECURITY_ARCHITECTURE_CONCISE.md) - Security model
 3. [TDD_IMPLEMENTATION_SUMMARY.md](./security/TDD_IMPLEMENTATION_SUMMARY.md) - Test approach
 4. [QUICKSTART_TDD.md](./security/QUICKSTART_TDD.md) - Start developing
@@ -149,13 +149,13 @@ Historical and outdated documentation preserved for reference:
 **🔐 Security Engineer**
 
 1. [SECURITY_ARCHITECTURE_CONCISE.md](./security/SECURITY_ARCHITECTURE_CONCISE.md) - Security model
-2. [ARCHITECTURE.md](./ARCHITECTURE.md) - Attack prevention details
+2. [ARCHITECTURE.md](./multi-tenant-migration/ARCHITECTURE.md) - Attack prevention details
 3. [FULL_STACK_EXAMPLE_COMPLETE.md](./security/FULL_STACK_EXAMPLE_COMPLETE.md) - Attack scenarios
 
 **☁️ DevOps / SRE**
 
 1. [DEPLOY.md](./deployment/DEPLOY.md) - Deployment guide
-2. [ARCHITECTURE.md](./ARCHITECTURE.md) - Infrastructure overview
+2. [ARCHITECTURE.md](./multi-tenant-migration/ARCHITECTURE.md) - Infrastructure overview
 
 **🧪 QA / Test Engineer**
 
@@ -166,7 +166,7 @@ Historical and outdated documentation preserved for reference:
 ### By Task
 
 **Understanding the System**
-→ [ARCHITECTURE.md](./ARCHITECTURE.md)
+→ [ARCHITECTURE.md](./multi-tenant-migration/ARCHITECTURE.md)
 
 **Implementing a Feature**
 → [QUICKSTART_TDD.md](./security/QUICKSTART_TDD.md) → Write tests → Implement

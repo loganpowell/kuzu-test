@@ -254,6 +254,6 @@ We've successfully implemented a secure, performant edge-based permission system
 
 See documentation:
 
-- [QUICKSTART_TDD.md](QUICKSTART_TDD.md) - Run tests, understand TDD approach
-- [TDD_IMPLEMENTATION_SUMMARY.md](TDD_IMPLEMENTATION_SUMMARY.md) - Detailed implementation
-- [worker/README.md](worker/README.md) - Project overview
+- [QUICKSTART_TDD.md](../security/QUICKSTART_TDD.md) - Run tests, understand TDD approach
+- [TDD_IMPLEMENTATION_SUMMARY.md](../security/TDD_IMPLEMENTATION_SUMMARY.md) - Detailed implementation
+- [worker/README.md](../security/worker/README.md) - Project overview

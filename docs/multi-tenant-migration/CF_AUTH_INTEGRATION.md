@@ -7,7 +7,7 @@
 
 ## Overview
 
-This document outlines how to integrate the existing [cf-auth](../cf-auth/README.md) Pulumi-based authentication infrastructure with Relish's Auth.js + D1 approach for a unified authentication and authorization system.
+This document outlines how to integrate the existing [cf-auth](../../cf-auth/README.md) Pulumi-based authentication infrastructure with Relish's Auth.js + D1 approach for a unified authentication and authorization system.
 
 ## Current State
 
@@ -142,6 +142,7 @@ Use cf-auth for email/password + JWT, Auth.js for OAuth providers.
    ```
 
 3. **JWT validation in Worker:**
+
    ```typescript
    export default {
      async fetch(request: Request, env: Env) {
@@ -392,10 +393,10 @@ sequenceDiagram
 
 ## References
 
-- [CF-Auth README](../cf-auth/README.md)
-- [CF-Auth Phase 2 Complete](../cf-auth/docs/PHASE2_COMPLETE.md)
-- [AWS SES Setup](../cf-auth/docs/AWS_SES_SETUP.md)
-- [Relish Project Summary](./PROJECT_SUMMARY.md)
+- [CF-Auth README](../../cf-auth/README.md)
+- [CF-Auth Phase 2 Complete](../../cf-auth/docs/PHASE2_COMPLETE.md)
+- [AWS SES Setup](../../cf-auth/docs/AWS_SES_SETUP.md)
+- [Relish Project Summary](../PROJECT_SUMMARY.md)
 - [Relish Architecture](./ARCHITECTURE.md)
 
 ---
