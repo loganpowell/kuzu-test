@@ -439,7 +439,7 @@ user:alice,resource:docs,false,true,true,false,2026-01-01,user:admin
 **Cons:**
 
 - ❌ **Schema Rigidity**: Adding new entity types requires code changes
-- ❌ **Admin Friction**: Can't dynamically add new node/edge types  
+- ❌ **Admin Friction**: Can't dynamically add new node/edge types
 - ❌ **Developer Dependency**: 2-4 hours (dev + test + deploy) for new types
 - ❌ **Schema Migrations**: Changing structure requires coordinated updates
 
@@ -748,17 +748,17 @@ export async function loadDepartments(
 
 **Comparison: Current vs Future State**
 
-| Aspect                 | Current (Manual)      | Future (Schema-Driven)    |
-| ---------------------- | --------------------- | ------------------------- |
-| Add new entity         | 2-4 hours (dev cycle) | 2-3 minutes (admin UI)    |
-| Type safety            | ✅ Hand-written       | ✅ Auto-generated         |
-| Query performance      | ⭐⭐⭐⭐⭐ 0.5ms       | ⭐⭐⭐⭐⭐ 0.5ms           |
-| Storage efficiency     | ⭐⭐⭐⭐⭐ Optimal     | ⭐⭐⭐⭐⭐ Optimal         |
-| Schema changes         | Code deploy           | Hot reload                |
-| Admin empowerment      | ❌ Dev required       | ✅ Self-service           |
-| Validation             | ✅ Hand-written       | ✅ Auto-generated         |
-| Development complexity | ⭐⭐⭐⭐ Simple        | ⭐⭐⭐ Need compiler       |
-| Runtime complexity     | ⭐⭐⭐⭐ Simple        | ⭐⭐⭐ Hot reload          |
+| Aspect                 | Current (Manual)      | Future (Schema-Driven) |
+| ---------------------- | --------------------- | ---------------------- |
+| Add new entity         | 2-4 hours (dev cycle) | 2-3 minutes (admin UI) |
+| Type safety            | ✅ Hand-written       | ✅ Auto-generated      |
+| Query performance      | ⭐⭐⭐⭐⭐ 0.5ms      | ⭐⭐⭐⭐⭐ 0.5ms       |
+| Storage efficiency     | ⭐⭐⭐⭐⭐ Optimal    | ⭐⭐⭐⭐⭐ Optimal     |
+| Schema changes         | Code deploy           | Hot reload             |
+| Admin empowerment      | ❌ Dev required       | ✅ Self-service        |
+| Validation             | ✅ Hand-written       | ✅ Auto-generated      |
+| Development complexity | ⭐⭐⭐⭐ Simple       | ⭐⭐⭐ Need compiler   |
+| Runtime complexity     | ⭐⭐⭐⭐ Simple       | ⭐⭐⭐ Hot reload      |
 
 **Real-World Examples:**
 
@@ -1033,6 +1033,7 @@ This schema-driven approach gives you **admin flexibility** with **typed perform
 ---
 
 ## 🔐 Security Model
+
 ### Edge-Based Validation
 
 **Why edges instead of simple permission checks?**

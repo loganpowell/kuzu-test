@@ -1,0 +1,314 @@
+# yaml-language-server: $schema=./relish.schema.json
+
+version: "1.0"
+name: "Authorization Graph Schema"
+description: "Multi-tenant authorization system with client-side graph queries"
+
+# ============================================
+# CORE ENTITIES (Built-in types)
+# ============================================
+
+entities:
+  User:
+    description: "Human or service account"
+    fields:
+      - name: id
+        type: string
+        required: true
+        unique: true
+        pattern: "^user:"
+
+      - name: name
+        type: string
+        required: true
+        maxLength: 255
+
+      - name: email
+        type: string
+        required: true
+        unique: true
+        format: email
+
+      - name: created_at
+        type: timestamp
+        required: true
+        default: now
+
+      - name: updated_at
+        type: timestamp
+        default: now
+
+      - name: is_active
+        type: boolean
+        required: true
+        default: true
+
+      - name: metadata
+        type: json
+        default: "{}"
+
+    indexes:
+      - fields: [email]
+        unique: true
+      - fields: [name]
+      - fields: [is_active]
+
+  Group:
+    description: "Collection of users with inherited permissions"
+    fields:
+      - name: id
+        type: string
+        required: true
+        unique: true
+        pattern: "^group:"
+
+      - name: name
+        type: string
+        required: true
+        maxLength: 255
+
+      - name: description
+        type: string
+        maxLength: 1000
+
+      - name: created_at
+        type: timestamp
+        required: true
+        default: now
+
+      - name: updated_at
+        type: timestamp
+        default: now
+
+      - name: is_active
+        type: boolean
+        required: true
+        default: true
+
+      - name: metadata
+        type: json
+        default: "{}"
+
+    indexes:
+      - fields: [name]
+      - fields: [is_active]
+
+  Resource:
+    description: "Protected object requiring permissions"
+    fields:
+      - name: id
+        type: string
+        required: true
+        unique: true
+        pattern: "^resource:"
+
+      - name: name
+        type: string
+        required: true
+        maxLength: 255
+
+      - name: type
+        type: string
+        required: true
+        maxLength: 100
+
+      - name: owner
+        type: string
+        required: true
+        format: user_reference
+
+      - name: created_at
+        type: timestamp
+        required: true
+        default: now
+
+      - name: updated_at
+        type: timestamp
+        default: now
+
+      - name: metadata
+        type: json
+        default: "{}"
+
+    indexes:
+      - fields: [owner]
+      - fields: [type, name]
+      - fields: [type]
+
+# ============================================
+# CUSTOM ENTITIES (Add your types here)
+# ============================================
+
+# Example: Department entity (uncomment to enable)
+# Department:
+#   description: "Organizational department"
+#   fields:
+#     - name: id
+#       type: string
+#       required: true
+#       pattern: "^dept:"
+#
+#     - name: name
+#       type: string
+#       required: true
+#
+#     - name: budget
+#       type: number
+#       min: 0
+#
+#     - name: head_id
+#       type: string
+#       format: user_reference
+#
+#   indexes:
+#     - fields: [head_id]
+#     - fields: [name]
+#       unique: true
+
+# Example: Project entity (uncomment to enable)
+# Project:
+#   description: "Project or initiative"
+#   fields:
+#     - name: id
+#       type: string
+#       required: true
+#       pattern: "^proj:"
+#
+#     - name: name
+#       type: string
+#       required: true
+#
+#     - name: deadline
+#       type: date
+#
+#     - name: status
+#       type: enum
+#       values: [planning, active, completed, cancelled]
+#       default: planning
+#
+#   indexes:
+#     - fields: [status]
+
+# ============================================
+# CORE RELATIONSHIPS (Built-in)
+# ============================================
+
+relationships:
+  member_of:
+    description: "User belongs to Group"
+    from: User
+    to: Group
+    fields:
+      - name: joined_at
+        type: timestamp
+        required: true
+        default: now
+
+  inherits_from:
+    description: "Group inherits permissions from parent Group"
+    from: Group
+    to: Group
+    fields:
+      - name: created_at
+        type: timestamp
+        required: true
+        default: now
+
+  user_permission:
+    description: "User has direct permissions on Resource"
+    from: User
+    to: Resource
+    fields:
+      - name: can_create
+        type: boolean
+        required: true
+        default: false
+
+      - name: can_read
+        type: boolean
+        required: true
+        default: false
+
+      - name: can_update
+        type: boolean
+        required: true
+        default: false
+
+      - name: can_delete
+        type: boolean
+        required: true
+        default: false
+
+      - name: granted_at
+        type: timestamp
+        required: true
+        default: now
+
+      - name: granted_by
+        type: string
+        required: true
+        format: user_reference
+
+  group_permission:
+    description: "Group has permissions on Resource (inherited by members)"
+    from: Group
+    to: Resource
+    fields:
+      - name: can_create
+        type: boolean
+        required: true
+        default: false
+
+      - name: can_read
+        type: boolean
+        required: true
+        default: false
+
+      - name: can_update
+        type: boolean
+        required: true
+        default: false
+
+      - name: can_delete
+        type: boolean
+        required: true
+        default: false
+
+      - name: granted_at
+        type: timestamp
+        required: true
+        default: now
+
+      - name: granted_by
+        type: string
+        required: true
+        format: user_reference
+# ============================================
+# CUSTOM RELATIONSHIPS (Add your types here)
+# ============================================
+
+# Example: manages relationship (uncomment to enable)
+# manages:
+#   description: "User manages Department"
+#   from: User
+#   to: Department
+#   fields:
+#     - name: since
+#       type: timestamp
+#       default: now
+
+# Example: assigned_to relationship (uncomment to enable)
+# assigned_to:
+#   description: "User assigned to Project"
+#   from: User
+#   to: Project
+#   fields:
+#     - name: role
+#       type: string
+#       maxLength: 100
+#
+#     - name: allocation
+#       type: number
+#       min: 0
+#       max: 100
+#       description: "Percentage of time allocated (0-100)"

@@ -56,22 +56,22 @@ This system provides **sub-millisecond authorization checks** with **client-side
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ CLIENT (Browser)                                            │
-│  • KuzuDB WASM: In-memory graph database                   │
-│  • Authorization queries: <1ms (zero network latency)      │
-│  • WebSocket sync: Real-time mutation broadcasts           │
+│  • KuzuDB WASM: In-memory graph database                    │
+│  • Authorization queries: <1ms (zero network latency)       │
+│  • WebSocket sync: Real-time mutation broadcasts            │
 └─────────────────────────────────────────────────────────────┘
                            ↕ Edge Proofs
 ┌─────────────────────────────────────────────────────────────┐
-│ SERVER (Cloudflare Workers + Durable Objects)              │
-│  • Edge validation: O(n) chain connectivity                │
-│  • CSV storage: 30-40% faster than JSON                    │
-│  • WebSocket broadcasts: <50ms mutation propagation        │
+│ SERVER (Cloudflare Workers + Durable Objects)               │
+│  • Edge validation: O(n) chain connectivity                 │
+│  • CSV storage: 30-40% faster than JSON                     │
+│  • WebSocket broadcasts: <50ms mutation propagation         │
 └─────────────────────────────────────────────────────────────┘
                            ↕ CSV Files
 ┌─────────────────────────────────────────────────────────────┐
-│ STORAGE (Cloudflare R2 + KV)                               │
-│  • R2: Canonical CSV files (users, groups, permissions)    │
-│  • KV: Mutation log for catch-up sync                      │
+│ STORAGE (Cloudflare R2 + KV)                                │
+│  • R2: Canonical CSV files (users, groups, permissions)     │
+│  • KV: Mutation log for catch-up sync                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 

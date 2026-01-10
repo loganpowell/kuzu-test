@@ -1,0 +1,298 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/your-org/kuzu-auth/schema.schema.json",
+  "title": "Authorization Graph Schema",
+  "description": "Schema definition for client-side authorization graph with KuzuDB WASM",
+  "type": "object",
+  "required": ["version", "name", "entities"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Schema version (semver format)",
+      "pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
+      "examples": ["1.0", "1.2.3"]
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable schema name",
+      "minLength": 1,
+      "maxLength": 100,
+      "examples": ["Authorization Graph Schema", "Multi-Tenant Access Control"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Optional schema description"
+    },
+    "entities": {
+      "type": "object",
+      "description": "Entity type definitions (nodes in the graph)",
+      "additionalProperties": {
+        "$ref": "#/definitions/Entity"
+      },
+      "minProperties": 1
+    },
+    "relationships": {
+      "type": "object",
+      "description": "Relationship type definitions (edges in the graph)",
+      "additionalProperties": {
+        "$ref": "#/definitions/Relationship"
+      }
+    }
+  },
+  "definitions": {
+    "Entity": {
+      "type": "object",
+      "description": "Entity type definition (e.g., User, Group, Resource)",
+      "required": ["fields"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Human-readable entity description"
+        },
+        "fields": {
+          "type": "array",
+          "description": "Field definitions for this entity",
+          "items": {
+            "$ref": "#/definitions/Field"
+          },
+          "minItems": 1
+        },
+        "indexes": {
+          "type": "array",
+          "description": "Index definitions for query optimization",
+          "items": {
+            "$ref": "#/definitions/Index"
+          }
+        }
+      }
+    },
+    "Field": {
+      "type": "object",
+      "description": "Field definition within an entity or relationship",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Field name (must be valid identifier)",
+          "pattern": "^[a-z_][a-z0-9_]*$",
+          "minLength": 1,
+          "maxLength": 64,
+          "examples": ["id", "name", "email", "created_at", "is_active"]
+        },
+        "type": {
+          "type": "string",
+          "description": "Field data type",
+          "enum": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "date",
+            "timestamp",
+            "json",
+            "enum"
+          ]
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether this field is required (non-null)",
+          "default": false
+        },
+        "unique": {
+          "type": "boolean",
+          "description": "Whether this field must have unique values",
+          "default": false
+        },
+        "default": {
+          "description": "Default value if not provided (or special keyword)",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "null" }
+          ],
+          "examples": ["now", "uuid", true, false, 0, ""]
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Regex pattern for string validation",
+          "examples": ["^user:", "^[a-z0-9-]+$", "^\\w+@\\w+\\.\\w+$"]
+        },
+        "format": {
+          "type": "string",
+          "description": "Format constraint for specific types",
+          "enum": [
+            "email",
+            "url",
+            "uuid",
+            "user_reference",
+            "group_reference",
+            "resource_reference"
+          ]
+        },
+        "minLength": {
+          "type": "integer",
+          "description": "Minimum string length",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "description": "Maximum string length",
+          "minimum": 1
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum numeric value"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum numeric value"
+        },
+        "values": {
+          "type": "array",
+          "description": "Valid enum values (required if type=enum)",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "examples": [["active", "inactive", "pending"], ["read", "write", "admin"]]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "type": { "const": "enum" } }
+          },
+          "then": {
+            "required": ["values"]
+          }
+        }
+      ]
+    },
+    "Index": {
+      "type": "object",
+      "description": "Index definition for query optimization",
+      "required": ["fields"],
+      "properties": {
+        "fields": {
+          "type": "array",
+          "description": "Fields to index (single or composite)",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "examples": [["email"], ["name"], ["type", "name"]]
+        },
+        "unique": {
+          "type": "boolean",
+          "description": "Whether this is a unique index",
+          "default": false
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional custom index name"
+        }
+      }
+    },
+    "Relationship": {
+      "type": "object",
+      "description": "Relationship type definition (e.g., member_of, permission)",
+      "required": ["from", "to"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Human-readable relationship description"
+        },
+        "from": {
+          "description": "Source entity type(s)",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Single source entity type",
+              "examples": ["User", "Group"]
+            },
+            {
+              "type": "array",
+              "description": "Multiple source entity types (union)",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "examples": [["User", "Group"]]
+            }
+          ]
+        },
+        "to": {
+          "description": "Target entity type(s)",
+          "oneOf": [
+            {
+              "type": "string",
+              "description": "Single target entity type",
+              "examples": ["Group", "Resource"]
+            },
+            {
+              "type": "array",
+              "description": "Multiple target entity types (union)",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "description": "Additional fields on the relationship edge",
+          "items": {
+            "$ref": "#/definitions/Field"
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": "1.0",
+      "name": "Authorization Graph Schema",
+      "description": "Multi-tenant authorization system with extensible entity types",
+      "entities": {
+        "User": {
+          "description": "Human or service account",
+          "fields": [
+            { "name": "id", "type": "string", "required": true, "pattern": "^user:" },
+            { "name": "name", "type": "string", "required": true, "maxLength": 255 },
+            { "name": "email", "type": "string", "required": true, "format": "email", "unique": true },
+            { "name": "created_at", "type": "timestamp", "default": "now" },
+            { "name": "is_active", "type": "boolean", "default": true }
+          ],
+          "indexes": [
+            { "fields": ["email"], "unique": true },
+            { "fields": ["name"] }
+          ]
+        },
+        "Group": {
+          "description": "Collection of users with inherited permissions",
+          "fields": [
+            { "name": "id", "type": "string", "required": true, "pattern": "^group:" },
+            { "name": "name", "type": "string", "required": true },
+            { "name": "description", "type": "string" }
+          ],
+          "indexes": [
+            { "fields": ["name"] }
+          ]
+        }
+      },
+      "relationships": {
+        "member_of": {
+          "description": "User belongs to Group",
+          "from": "User",
+          "to": "Group",
+          "fields": [
+            { "name": "joined_at", "type": "timestamp", "default": "now" }
+          ]
+        }
+      }
+    }
+  ]
+}
