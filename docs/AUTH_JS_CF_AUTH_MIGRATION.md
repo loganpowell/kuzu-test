@@ -1761,6 +1761,109 @@ const canDelete = await relish.authz.can('delete', 'project:123')
 
 ---
 
+### Phase 6: Cross-Platform Integration Testing (Weeks 19-21)
+
+**Goal:** Validate Relish works across all target platforms with real-world apps
+
+This phase ensures the platform works end-to-end on web, mobile, and desktop by building reference implementations and test applications.
+
+**Week 19: Web App Testing**
+
+- [ ] Build reference web app (React + Vite)
+  - Authentication flows (credentials, OAuth)
+  - Authorization checks (client-side WASM)
+  - Real-time sync via WebSocket
+  - Session management
+- [ ] Test progressive web app (PWA) scenario
+- [ ] Performance benchmarks
+  - Auth latency (<100ms)
+  - Authz query latency (<1ms)
+  - Bundle size (<100KB with WASM)
+- [ ] Browser compatibility testing
+  - Chrome, Firefox, Safari, Edge
+  - Mobile browsers (iOS Safari, Chrome Mobile)
+
+**Week 20: Tauri Desktop + Mobile Apps**
+
+Reference: [Using Auth0 with Tauri](https://dev.to/randomengy/using-auth0-with-tauri-14nl)
+
+**Desktop App (Tauri):**
+
+- [ ] Build reference Tauri desktop app
+  - OAuth flow with deep linking
+  - System keychain integration (macOS, Windows, Linux)
+  - Offline-first authorization (local WASM db)
+  - Auto-update for schema changes
+- [ ] Test platforms:
+  - macOS (Intel + Apple Silicon)
+  - Windows 10/11
+  - Linux (Ubuntu, Fedora)
+- [ ] Test scenarios:
+  - OAuth callback handling (custom protocol)
+  - Secure token storage (OS keychain)
+  - Background sync when app inactive
+  - Multi-window authorization state
+
+**Mobile App (Tauri Mobile):**
+
+- [ ] Build reference Tauri mobile app (iOS + Android)
+  - OAuth with system browser (ASWebAuthenticationSession / Chrome Custom Tabs)
+  - Biometric authentication (Face ID / Touch ID / fingerprint)
+  - SecureStore for tokens
+  - Push notification integration (permission updates)
+- [ ] Test platforms:
+  - iOS 15+ (iPhone, iPad)
+  - Android 10+ (various devices)
+- [ ] Test scenarios:
+  - App backgrounding/foregrounding
+  - Network interruption handling
+  - Token refresh on wake
+  - Deep linking from notifications
+
+**Week 21: React Native + Flutter (Alternative Mobile)**
+
+- [ ] Build React Native reference app
+  - @relish/mobile SDK integration
+  - Expo compatibility testing
+  - Bare React Native testing
+- [ ] Build Flutter reference app (optional)
+  - Dart SDK wrapper
+  - iOS/Android platform channels
+- [ ] Cross-platform consistency tests
+  - Same authorization graph on web/mobile/desktop
+  - Sync state across devices
+  - Offline mode behavior
+
+**Deliverables:**
+
+- Reference implementations for all platforms:
+  - Web app (React/Vite)
+  - Desktop app (Tauri - macOS/Windows/Linux)
+  - Mobile app (Tauri Mobile - iOS/Android)
+  - React Native app (alternative mobile)
+- Platform-specific documentation
+- Performance benchmarks per platform
+- Integration test suite covering:
+  - Authentication flows
+  - Authorization queries
+  - Offline scenarios
+  - Multi-device sync
+  - Platform-specific features (keychain, biometrics, etc.)
+
+**Platform Test Matrix:**
+
+| Platform      | Auth Method | Storage                | WASM | OAuth            | Biometric | Notes              |
+| ------------- | ----------- | ---------------------- | ---- | ---------------- | --------- | ------------------ |
+| Web (Chrome)  | Auth.js     | Cookies                | ✅   | ✅               | ❌        | Reference platform |
+| Web (Safari)  | Auth.js     | Cookies                | ✅   | ✅               | ❌        | Test WebKit        |
+| Tauri Desktop | JWT         | Keychain               | ✅   | ✅ (deep link)   | ❌        | macOS/Win/Linux    |
+| Tauri iOS     | JWT         | Keychain               | ✅   | ✅ (ASWebAuth)   | ✅        | Face ID            |
+| Tauri Android | JWT         | Keystore               | ✅   | ✅ (Custom Tabs) | ✅        | Fingerprint        |
+| React Native  | JWT         | SecureStore            | ✅   | ✅               | ✅        | Expo + bare        |
+| Flutter       | JWT         | flutter_secure_storage | ✅   | ✅               | ✅        | Optional           |
+
+---
+
 ## Security Model
 
 ### Multi-Tenant Isolation
