@@ -1,17 +1,274 @@
-# Next Steps Checklist - Phase 1, Week 2 Complete ✅
+# Next Steps Checklist - Phase 1, Week 4 ✅
 
 ## ✅ Current State (Updated January 10, 2026)
 
 **Feature Branch**: `feat/multi-tenant-infrastructure`
 
-- **Status**: ✅ **DEPLOYED TO PRODUCTION** - Fully operational
+- **Status**: ✅ **Week 3 COMPLETE** - Pulumi ESC Integrated
 - **Worker URL**: https://auth-service.logan-607.workers.dev
-- **Code**: 4,200+ lines across 15 components
-- **Tests**: 130 tests (109 passing, 21 skipped for R2)
-- **Docs**: 1,500+ lines of architecture and testing documentation
-- **Infrastructure**: D1, KV (4), Durable Objects (2), R2 (pending token permissions)
+- **Code**: 6,500+ lines across 28 components
+- **Tests**: 143 tests (130 unit, 13 E2E) - 106 unit passing, 13/13 E2E passing ✅
+- **Docs**: 3,000+ lines of architecture, testing, and infrastructure documentation
+- **Infrastructure**: D1 (11 tables), KV (4), Durable Objects (2), R2 (enabled), Pulumi ESC (secrets)
 
-## 🔄 Immediate Actions Required
+**Week 3 Achievements:**
+
+- ✅ Upgraded Pulumi CLI to v3.215.0 with ESC support
+- ✅ Migrated to Pulumi Cloud backend (loganpowell)
+- ✅ Created ESC environment: `loganpowell/cf-auth/dev`
+- ✅ Centralized secret management (JWT_SECRET, CLOUDFLARE_API_TOKEN)
+- ✅ Fixed dashboard metrics SQL bug
+- ✅ All E2E tests passing
+- ✅ Zero regressions after ESC migration
+
+## � Week 4 Priorities (In Progress)
+
+### 1. 🔄 Complete Pulumi Resource Import (IN PROGRESS)
+
+**Goal**: Import all existing Cloudflare resources into Pulumi for full IaC management.
+
+**Current State**: Hybrid approach - ESC manages secrets, but infrastructure is deployed manually.
+
+**Resources to Import** (~30 resources):
+
+- D1 Database: `auth-db-dev` (e213ec49-0d7e-4821-a62e-c2cdd0a3f512)
+- KV Namespaces (4): RATE_LIMITER, TOKEN_BLACKLIST, SESSION_CACHE, MUTATION_LOG
+- R2 Bucket: `tenant-data-dev` (with CSV data)
+- Durable Objects (2): TenantState, GraphStateCSV
+- Worker: auth-service
+- Worker Routes/Domains (if any)
+
+**Benefits**:
+
+- ✅ Reproducible infrastructure (disaster recovery)
+- ✅ Version controlled infrastructure changes
+- ✅ Consistent deployments across environments
+- ✅ Infrastructure diffs before deployment
+
+**Steps**:
+
+```bash
+cd /Users/logan/Documents/projects/kuzu-test/cf-auth/infrastructure
+
+# 1. Generate import commands
+pulumi import cloudflare:index/d1Database:D1Database auth-db e213ec49-0d7e-4821-a62e-c2cdd0a3f512
+
+# 2. Import KV namespaces (get IDs from wrangler.toml)
+pulumi import cloudflare:index/workersKvNamespace:WorkersKvNamespace rate-limiter <kv-id>
+
+# 3. Import R2 bucket
+pulumi import cloudflare:index/r2Bucket:R2Bucket tenant-data tenant-data-dev
+
+# 4. Update index.ts with imported resources
+# 5. Verify with: pulumi preview
+```
+
+**Success Criteria**:
+
+- [ ] All resources imported successfully
+- [ ] `pulumi preview` shows no changes
+- [ ] Infrastructure can be destroyed and recreated
+- [ ] Documentation updated with import process
+
+---
+
+### 2. 🧪 Fix Remaining DO Test Issues (NEXT)
+
+**Goal**: Clean up 24 DO tests with storage cleanup warnings.
+
+**Current State**:
+
+- Tests run and pass functionally
+- Storage cleanup error appears (cosmetic, vitest-pool-workers issue)
+- Output: `· tests/durable-objects.test.ts (24)`
+
+**Issue**:
+
+```
+Error: Failed to get current sqlite connection
+at assertNeverCalled (eval at <anonymous> (...))
+```
+
+**Potential Solutions**:
+
+1. Update vitest-pool-workers to latest version
+2. Investigate proper cleanup in test teardown
+3. Add explicit storage cleanup in afterEach hooks
+4. Check if storage API usage is correct
+
+**Steps**:
+
+```bash
+cd /Users/logan/Documents/projects/kuzu-test/cf-auth
+
+# 1. Check current vitest-pool-workers version
+npm list vitest-pool-workers
+
+# 2. Update to latest
+npm update vitest-pool-workers
+
+# 3. Run tests to verify
+npm test tests/durable-objects.test.ts
+
+# 4. If still issues, investigate teardown
+```
+
+**Success Criteria**:
+
+- [ ] All 130 unit tests pass cleanly
+- [ ] No storage cleanup errors
+- [ ] Clean test output
+
+---
+
+### 3. 📊 Add Monitoring & Observability (NEXT)
+
+**Goal**: Add production monitoring for errors, performance, and logs.
+
+**Current State**: No monitoring or error tracking configured.
+
+**Options**:
+
+**A. Axiom (Logs & Analytics)**
+
+```bash
+# Add Axiom integration
+npm install @axiomhq/js
+
+# Configure in wrangler.toml
+[observability]
+enabled = true
+head_sampling_rate = 1
+```
+
+**B. Sentry (Error Tracking)**
+
+```bash
+# Add Sentry for Workers
+npm install @sentry/cloudflare
+
+# Initialize in src/index.ts
+import * as Sentry from '@sentry/cloudflare';
+Sentry.init({ dsn: env.SENTRY_DSN });
+```
+
+**C. Cloudflare Analytics (Built-in)**
+
+- Already available in Cloudflare dashboard
+- Add custom analytics using:
+
+```typescript
+ctx.waitUntil(
+  env.ANALYTICS.writeDataPoint({
+    blobs: [tenantId, endpoint],
+    doubles: [responseTime],
+    indexes: [timestamp],
+  })
+);
+```
+
+**Recommended**: Start with Cloudflare Analytics + Sentry for errors
+
+**Steps**:
+
+```bash
+# 1. Set up Sentry project
+# 2. Add SENTRY_DSN to ESC environment
+# 3. Install Sentry SDK
+# 4. Add error boundary to worker
+# 5. Test error reporting
+# 6. Set up alerts
+```
+
+**Success Criteria**:
+
+- [ ] Error tracking operational
+- [ ] Performance metrics visible
+- [ ] Alert notifications configured
+- [ ] Dashboard for monitoring
+
+---
+
+## 📋 Week 4 Remaining Tasks
+
+### 4. 🔐 Secret Rotation Procedures
+
+**Goal**: Document and implement secret rotation for JWT and API keys.
+
+**Components**:
+
+- JWT_SECRET rotation process
+- API key rotation automation
+- Rollback procedures
+- Zero-downtime rotation strategy
+
+**Steps**:
+
+1. Document JWT rotation process (dual-secret support)
+2. Implement API key rotation endpoint
+3. Create rotation runbook
+4. Test rotation with canary deployment
+
+---
+
+### 5. 🏗️ Staging Environment
+
+**Goal**: Create isolated staging environment for testing.
+
+**Stack**: `loganpowell/cf-auth-infrastructure/staging`
+
+**Resources**:
+
+- Separate D1 database
+- Separate KV namespaces
+- Separate R2 bucket
+- Staging worker: auth-service-staging
+
+**Benefits**:
+
+- Test deployments before production
+- Integration testing with real infrastructure
+- Customer demos without affecting production
+
+---
+
+### 6. 🤖 CI/CD Integration
+
+**Goal**: Automate testing and deployment with GitHub Actions.
+
+**Workflow**:
+
+```yaml
+name: Deploy
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: npm test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: pulumi/actions@v4
+        with:
+          command: up
+          stack-name: loganpowell/cf-auth-infrastructure/dev
+```
+
+**ESC Integration**:
+
+```bash
+# GitHub Actions uses ESC for secrets
+pulumi env run loganpowell/cf-auth/dev -- wrangler deploy
+```
+
+---
+
+## �🔄 Immediate Actions Required
 
 ### 1. ✅ Database Migration Applied to D1 (COMPLETE)
 
