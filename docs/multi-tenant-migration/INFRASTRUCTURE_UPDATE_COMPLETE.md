@@ -6,7 +6,7 @@ Successfully updated Pulumi Cloudflare infrastructure to support the multi-tenan
 
 ## What Was Completed
 
-### 1. Pulumi Infrastructure Updates ([cf-auth/infrastructure/index.ts](../infrastructure/index.ts))
+### 1. Pulumi Infrastructure Updates ([cf-auth/infrastructure/index.ts](../../infrastructure/index.ts))
 
 **Added Resources:**
 
@@ -36,7 +36,7 @@ const tenantDataBucket = new cloudflare.R2Bucket("tenant-data-bucket", {
 - `mutationLogKvId`: KV namespace ID for wrangler.toml sync
 - `tenantDataBucketName`: R2 bucket name for wrangler.toml sync
 
-### 2. Wrangler Configuration ([cf-auth/wrangler.toml](../wrangler.toml))
+### 2. Wrangler Configuration ([cf-auth/wrangler.toml](../../wrangler.toml))
 
 **Added Bindings:**
 
@@ -70,7 +70,7 @@ new_classes = ["TenantState", "GraphStateCSV"]
 
 ### 3. Durable Object Implementations
 
-#### TenantState ([cf-auth/src/durable-objects/TenantState.ts](../src/durable-objects/TenantState.ts))
+#### TenantState ([cf-auth/src/durable-objects/TenantState.ts](../../src/durable-objects/TenantState.ts))
 
 **Purpose**: Per-tenant real-time connection hub and mutation broadcaster
 
@@ -90,7 +90,7 @@ new_classes = ["TenantState", "GraphStateCSV"]
 
 **Lines of Code**: 270
 
-#### GraphStateCSV ([cf-auth/src/durable-objects/GraphStateCSV.ts](../src/durable-objects/GraphStateCSV.ts))
+#### GraphStateCSV ([cf-auth/src/durable-objects/GraphStateCSV.ts](../../src/durable-objects/GraphStateCSV.ts))
 
 **Purpose**: Per-tenant authorization graph state loaded from CSV files
 
@@ -120,7 +120,7 @@ validateChain([edge1, edge2, edge3], userId, resourceId)
 
 **Lines of Code**: 416
 
-### 4. Type System Updates ([cf-auth/src/types.ts](../src/types.ts))
+### 4. Type System Updates ([cf-auth/src/types.ts](../../src/types.ts))
 
 **Updated Env Interface:**
 
@@ -145,7 +145,7 @@ export interface Env {
 }
 ```
 
-### 5. Worker Exports ([cf-auth/src/index.ts](../src/index.ts))
+### 5. Worker Exports ([cf-auth/src/index.ts](../../src/index.ts))
 
 **Exported DO Classes:**
 
@@ -155,7 +155,7 @@ export { GraphStateCSV } from "./durable-objects/GraphStateCSV";
 export default app;
 ```
 
-### 6. Deployment Scripts ([cf-auth/infrastructure/update-wrangler.sh](../infrastructure/update-wrangler.sh))
+### 6. Deployment Scripts ([cf-auth/infrastructure/update-wrangler.sh](../../infrastructure/update-wrangler.sh))
 
 **Added Resource Syncing:**
 
@@ -169,9 +169,9 @@ sed -i '' "s/TENANT_DATA_BUCKET_PLACEHOLDER/$TENANT_DATA_BUCKET/" ../wrangler.to
 
 ### 7. Documentation
 
-- ✅ [Durable Objects README](../src/durable-objects/README.md) (356 lines)
-- ✅ [Infrastructure README](../infrastructure/README.md) - Updated with R2, DO descriptions
-- ✅ [Admin Dashboard API README](../src/routes/admin/README.md) (existing)
+- ✅ [Durable Objects README](../../src/durable-objects/README.md) (356 lines)
+- ✅ [Infrastructure README](../../infrastructure/README.md) - Updated with R2, DO descriptions
+- ✅ [Admin Dashboard API README](../../src/routes/admin/README.md) (existing)
 
 ## Testing Status
 
@@ -444,10 +444,10 @@ edge_103,user_bob,resource_admin_panel,user_permission,admin,
 
 ## Related Documentation
 
-- [Multi-tenant Architecture](../../docs/multi-tenant-migration/MULTI_TENANT_ARCHITECTURE.md)
-- [Admin Dashboard API](../src/routes/admin/README.md)
-- [Durable Objects README](../src/durable-objects/README.md)
-- [Infrastructure README](../infrastructure/README.md)
+- [Multi-tenant Architecture](../../../docs/multi-tenant-migration/MULTI_TENANT_ARCHITECTURE.md)
+- [Admin Dashboard API](../../src/routes/admin/README.md)
+- [Durable Objects README](../../src/durable-objects/README.md)
+- [Infrastructure README](../../infrastructure/README.md)
 
 ## Success Metrics
 

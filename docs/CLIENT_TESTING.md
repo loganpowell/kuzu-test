@@ -5,6 +5,7 @@ This directory contains E2E test suites for client applications using the cf-aut
 ## Web Application (Qwik Demo App)
 
 ### Location
+
 `cf-auth/demo-app/`
 
 ### Running Tests
@@ -35,7 +36,9 @@ pnpm test:e2e:report
 ### Test Suites
 
 #### 1. **Authentication Flow** (`e2e/auth.spec.ts`)
+
 Tests complete authentication lifecycle:
+
 - User registration with validation
 - Email verification flow
 - Login/logout functionality
@@ -47,6 +50,7 @@ Tests complete authentication lifecycle:
 - Password strength validation
 
 **Key Test Cases:**
+
 - ✅ Display login page
 - ✅ Navigate to registration
 - ✅ Show validation errors
@@ -62,7 +66,9 @@ Tests complete authentication lifecycle:
 - ✅ Handle session expiration
 
 #### 2. **Authorization & Permissions** (`e2e/permissions.spec.ts`)
+
 Tests the permission system:
+
 - Role assignment and revocation
 - Permission checks and validation
 - Access control enforcement
@@ -73,6 +79,7 @@ Tests the permission system:
 - Search and pagination
 
 **Key Test Cases:**
+
 - ✅ Display permissions dashboard
 - ✅ List available roles
 - ✅ Create custom role
@@ -89,7 +96,9 @@ Tests the permission system:
 - ✅ Export audit trail
 
 #### 3. **Session Management** (`e2e/session.spec.ts`)
+
 Tests session handling:
+
 - Session persistence across navigation
 - Token refresh automation
 - Multi-tab synchronization
@@ -100,6 +109,7 @@ Tests session handling:
 - Sensitive data cleanup on logout
 
 **Key Test Cases:**
+
 - ✅ Maintain session across page reloads
 - ✅ Maintain session across navigation
 - ✅ Handle token refresh automatically
@@ -114,6 +124,7 @@ Tests session handling:
 ### Test Helpers (`e2e/helpers.ts`)
 
 Utility functions for test setup:
+
 - `createTestUser()` - Generate unique test users
 - `registerUser()` - Register via UI
 - `loginUser()` - Login via UI
@@ -130,6 +141,7 @@ Utility functions for test setup:
 ### Prerequisites
 
 1. **Backend running**: cf-auth worker must be running on `http://localhost:8787`
+
    ```bash
    cd cf-auth
    pnpm run dev
@@ -166,6 +178,7 @@ Tests can be run in CI environments:
 ### Test Configuration
 
 Configuration in `playwright.config.ts`:
+
 - **Browsers**: Chrome, Firefox, WebKit, Mobile Chrome, Mobile Safari
 - **Base URL**: `http://localhost:5173`
 - **Retries**: 2 on CI, 0 locally
@@ -179,25 +192,25 @@ Configuration in `playwright.config.ts`:
 Example test structure:
 
 ```typescript
-import { test, expect } from '@playwright/test';
-import { loginUser, createTestUser } from './helpers';
+import { test, expect } from "@playwright/test";
+import { loginUser, createTestUser } from "./helpers";
 
-test.describe('Feature Name', () => {
-  const testUser = createTestUser('feature');
+test.describe("Feature Name", () => {
+  const testUser = createTestUser("feature");
 
   test.beforeEach(async ({ page }) => {
     await loginUser(page, testUser);
   });
 
-  test('should do something', async ({ page }) => {
+  test("should do something", async ({ page }) => {
     // Arrange
-    await page.goto('/some-page');
-    
+    await page.goto("/some-page");
+
     // Act
-    await page.getByRole('button', { name: /click me/i }).click();
-    
+    await page.getByRole("button", { name: /click me/i }).click();
+
     // Assert
-    await expect(page).toHaveURL('/expected-url');
+    await expect(page).toHaveURL("/expected-url");
     await expect(page.getByText(/success/i)).toBeVisible();
   });
 });
@@ -206,26 +219,32 @@ test.describe('Feature Name', () => {
 ### Debugging Tests
 
 1. **UI Mode** (recommended for debugging):
+
    ```bash
    pnpm test:e2e:ui
    ```
+
    - Visual test runner
    - Step through tests
    - Time travel debugging
    - Watch mode
 
 2. **Debug Mode**:
+
    ```bash
    pnpm test:e2e:debug
    ```
+
    - Runs in headed mode
    - Opens Playwright Inspector
    - Pause and step through tests
 
 3. **Headed Mode**:
+
    ```bash
    pnpm test:e2e:headed
    ```
+
    - See browser while tests run
    - Watch UI interactions
    - Slower execution for observation
@@ -255,11 +274,13 @@ test.describe('Feature Name', () => {
 ## Desktop Application (Tauri)
 
 ### Location
+
 `desktop-app/`
 
 ### Features
 
 The Tauri desktop app provides:
+
 - Native desktop experience (macOS, Windows, Linux)
 - Full authentication integration
 - Permission management UI
@@ -285,6 +306,7 @@ pnpm tauri build
 ### Architecture
 
 The desktop app uses:
+
 - **Frontend**: Vanilla TypeScript + Vite
 - **Backend**: Tauri (Rust)
 - **Auth Client**: Custom TypeScript client (`src/auth.ts`)
@@ -293,6 +315,7 @@ The desktop app uses:
 ### Authentication Client
 
 The `AuthClient` class provides:
+
 - User registration
 - Login/logout
 - Token management (auto-refresh)
@@ -303,16 +326,16 @@ The `AuthClient` class provides:
 Example usage:
 
 ```typescript
-import { authClient } from './auth';
+import { authClient } from "./auth";
 
 // Login
 const { user, tokens } = await authClient.login({
-  email: 'user@example.com',
-  password: 'password123'
+  email: "user@example.com",
+  password: "password123",
 });
 
 // Check permission
-const canEdit = await authClient.hasPermission('resource:edit');
+const canEdit = await authClient.hasPermission("resource:edit");
 
 // Get current user
 const { user } = await authClient.getMe();
@@ -324,12 +347,14 @@ await authClient.logout();
 ### Testing Desktop App
 
 **Manual Testing:**
+
 1. Start cf-auth backend: `cd cf-auth && pnpm run dev`
 2. Start desktop app: `cd desktop-app && pnpm tauri dev`
 3. Test authentication flows
 4. Test permission checks
 
 **E2E Testing** (coming soon):
+
 - Tauri integration tests using WebDriver
 - Cross-platform testing (macOS, Windows, Linux)
 - Automated UI testing with Playwright
@@ -354,11 +379,13 @@ Installers will be in `desktop-app/src-tauri/target/release/bundle/`
 ### Token Storage
 
 **Web App:**
+
 - Access tokens in HTTP-only cookies
 - Refresh tokens in secure cookies
 - SameSite=Strict for CSRF protection
 
 **Desktop App:**
+
 - Tokens stored in localStorage (encrypted by Tauri)
 - Platform-specific secure storage (coming soon)
 - Auto-expiration and refresh
@@ -385,6 +412,7 @@ When adding new features:
 ### Test Checklist
 
 Before submitting PR:
+
 - [ ] All existing tests pass
 - [ ] New tests added for new features
 - [ ] Tests pass on Chrome, Firefox, WebKit
@@ -402,6 +430,7 @@ Before submitting PR:
 ## Support
 
 For issues or questions:
+
 - Open issue with `testing` label
 - Include test failure screenshots
 - Provide browser/OS information

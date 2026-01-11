@@ -1,6 +1,6 @@
 /**
  * Auth Service Client for Desktop App
- * 
+ *
  * Handles authentication and authorization with the cf-auth backend
  */
 
@@ -38,7 +38,7 @@ export class AuthClient {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
 
-  constructor(baseUrl: string = 'http://localhost:8787') {
+  constructor(baseUrl: string = "http://localhost:8787") {
     this.baseUrl = baseUrl;
     this.loadTokens();
   }
@@ -49,18 +49,21 @@ export class AuthClient {
   private saveTokens(tokens: AuthTokens): void {
     this.accessToken = tokens.accessToken;
     this.refreshToken = tokens.refreshToken;
-    
-    localStorage.setItem('access_token', tokens.accessToken);
-    localStorage.setItem('refresh_token', tokens.refreshToken);
-    localStorage.setItem('expires_at', String(Date.now() + tokens.expiresIn * 1000));
+
+    localStorage.setItem("access_token", tokens.accessToken);
+    localStorage.setItem("refresh_token", tokens.refreshToken);
+    localStorage.setItem(
+      "expires_at",
+      String(Date.now() + tokens.expiresIn * 1000)
+    );
   }
 
   /**
    * Load tokens from localStorage
    */
   private loadTokens(): void {
-    this.accessToken = localStorage.getItem('access_token');
-    this.refreshToken = localStorage.getItem('refresh_token');
+    this.accessToken = localStorage.getItem("access_token");
+    this.refreshToken = localStorage.getItem("refresh_token");
   }
 
   /**
@@ -69,16 +72,16 @@ export class AuthClient {
   private clearTokens(): void {
     this.accessToken = null;
     this.refreshToken = null;
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('expires_at');
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("expires_at");
   }
 
   /**
    * Check if token is expired
    */
   private isTokenExpired(): boolean {
-    const expiresAt = localStorage.getItem('expires_at');
+    const expiresAt = localStorage.getItem("expires_at");
     if (!expiresAt) return true;
     return Date.now() >= parseInt(expiresAt);
   }
@@ -91,12 +94,12 @@ export class AuthClient {
     options: RequestInit = {}
   ): Promise<T> {
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options.headers,
     };
 
     if (this.accessToken) {
-      headers['Authorization'] = `Bearer ${this.accessToken}`;
+      headers["Authorization"] = `Bearer ${this.accessToken}`;
     }
 
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -106,7 +109,7 @@ export class AuthClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({
-        error: 'Unknown error',
+        error: "Unknown error",
         message: response.statusText,
       }));
       throw new Error(error.message || error.error);
@@ -119,8 +122,8 @@ export class AuthClient {
    * Register a new user
    */
   async register(data: RegisterData): Promise<{ user: User }> {
-    const result = await this.request<{ user: User }>('/v1/auth/register', {
-      method: 'POST',
+    const result = await this.request<{ user: User }>("/v1/auth/register", {
+      method: "POST",
       body: JSON.stringify(data),
     });
     return result;
@@ -129,15 +132,17 @@ export class AuthClient {
   /**
    * Login with email and password
    */
-  async login(credentials: LoginCredentials): Promise<{ user: User; tokens: AuthTokens }> {
+  async login(
+    credentials: LoginCredentials
+  ): Promise<{ user: User; tokens: AuthTokens }> {
     const result = await this.request<{ user: User; tokens: AuthTokens }>(
-      '/v1/auth/login',
+      "/v1/auth/login",
       {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify(credentials),
       }
     );
-    
+
     this.saveTokens(result.tokens);
     return result;
   }
@@ -147,8 +152,8 @@ export class AuthClient {
    */
   async logout(): Promise<void> {
     try {
-      await this.request('/v1/auth/logout', {
-        method: 'POST',
+      await this.request("/v1/auth/logout", {
+        method: "POST",
       });
     } finally {
       this.clearTokens();
@@ -160,14 +165,14 @@ export class AuthClient {
    */
   async getMe(): Promise<{ user: User }> {
     if (!this.accessToken) {
-      throw new Error('Not authenticated');
+      throw new Error("Not authenticated");
     }
 
     if (this.isTokenExpired()) {
       await this.refreshAccessToken();
     }
 
-    return this.request('/v1/auth/me');
+    return this.request("/v1/auth/me");
   }
 
   /**
@@ -175,13 +180,16 @@ export class AuthClient {
    */
   async refreshAccessToken(): Promise<void> {
     if (!this.refreshToken) {
-      throw new Error('No refresh token available');
+      throw new Error("No refresh token available");
     }
 
-    const result = await this.request<{ tokens: AuthTokens }>('/v1/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken: this.refreshToken }),
-    });
+    const result = await this.request<{ tokens: AuthTokens }>(
+      "/v1/auth/refresh",
+      {
+        method: "POST",
+        body: JSON.stringify({ refreshToken: this.refreshToken }),
+      }
+    );
 
     this.saveTokens(result.tokens);
   }
@@ -189,7 +197,9 @@ export class AuthClient {
   /**
    * Get user permissions
    */
-  async getUserPermissions(userId: string): Promise<{ permissions: Permission[] }> {
+  async getUserPermissions(
+    userId: string
+  ): Promise<{ permissions: Permission[] }> {
     return this.request(`/v1/users/${userId}/permissions`);
   }
 
@@ -200,7 +210,7 @@ export class AuthClient {
     try {
       const { user } = await this.getMe();
       const { permissions } = await this.getUserPermissions(user.id);
-      return permissions.some(p => p.name === permissionName && p.granted);
+      return permissions.some((p) => p.name === permissionName && p.granted);
     } catch {
       return false;
     }
@@ -216,9 +226,12 @@ export class AuthClient {
   /**
    * Change password
    */
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await this.request('/v1/auth/change-password', {
-      method: 'POST',
+  async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    await this.request("/v1/auth/change-password", {
+      method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
     });
   }
@@ -227,8 +240,8 @@ export class AuthClient {
    * Request password reset
    */
   async forgotPassword(email: string): Promise<void> {
-    await this.request('/v1/auth/forgot-password', {
-      method: 'POST',
+    await this.request("/v1/auth/forgot-password", {
+      method: "POST",
       body: JSON.stringify({ email }),
     });
   }
@@ -237,8 +250,8 @@ export class AuthClient {
    * Reset password with token
    */
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    await this.request('/v1/auth/reset-password', {
-      method: 'POST',
+    await this.request("/v1/auth/reset-password", {
+      method: "POST",
       body: JSON.stringify({ token, newPassword }),
     });
   }
@@ -247,8 +260,8 @@ export class AuthClient {
    * Verify email with token
    */
   async verifyEmail(token: string): Promise<void> {
-    await this.request('/v1/auth/verify-email', {
-      method: 'POST',
+    await this.request("/v1/auth/verify-email", {
+      method: "POST",
       body: JSON.stringify({ token }),
     });
   }
