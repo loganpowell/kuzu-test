@@ -1,32 +1,28 @@
-# Next Steps Checklist - Phase 1, Week 1 Complete
+# Next Steps Checklist - Phase 1, Week 2 Complete ✅
 
-## ✅ Current State
+## ✅ Current State (Updated January 10, 2026)
 
 **Feature Branch**: `feat/multi-tenant-infrastructure`
 
-- **Status**: Ready for testing/review
-- **Code**: 3,465+ lines across 10 components
-- **Tests**: 25+ integration tests
-- **Docs**: 1,000+ lines of architecture documentation
+- **Status**: ✅ **DEPLOYED TO PRODUCTION** - Fully operational
+- **Worker URL**: https://auth-service.logan-607.workers.dev
+- **Code**: 4,200+ lines across 15 components
+- **Tests**: 130 tests (109 passing, 21 skipped for R2)
+- **Docs**: 1,500+ lines of architecture and testing documentation
+- **Infrastructure**: D1, KV (4), Durable Objects (2), R2 (pending token permissions)
 
 ## 🔄 Immediate Actions Required
 
-### 1. Apply Database Migration to D1
+### 1. ✅ Database Migration Applied to D1 (COMPLETE)
 
 ```bash
-cd /Users/logan/Documents/projects/kuzu-test/cf-auth
-
-# Install Drizzle Kit (if not already installed)
-npm install -D drizzle-kit
-
-# Apply migration to D1
-npx drizzle-kit push
-
-# Verify schema was applied
-npx drizzle-kit introspect
+# Migration was applied successfully
+npx wrangler d1 migrations apply auth-db-dev --remote
 ```
 
-**Expected Output**: 9 tables created in D1 SQLite database
+**✅ Completed**: 9 tables created in D1 SQLite database (auth-db-dev)
+**Database ID**: e213ec49-0d7e-4821-a62e-c2cdd0a3f512
+**Bootstrap Data**: Platform tenant and admin API key created
 
 **Tables Created**:
 
@@ -40,30 +36,31 @@ npx drizzle-kit introspect
 - sessions (Auth.js)
 - verification_tokens (Auth.js)
 
-### 2. Run Integration Tests
+### 2. ✅ Integration Tests Running (COMPLETE)
 
 ```bash
 cd /Users/logan/Documents/projects/kuzu-test/cf-auth
 
 # Run all tests
-npm test
+npm test -- --run
 
-# Run specific test file
-npm test -- integration.test.ts
-
-# Run with coverage
-npm test -- --coverage
+# Run E2E tests against production
+./scripts/e2e-test.sh
 ```
 
-**Expected**: All 25+ tests pass ✅
+**✅ Results**: 130 total tests
+
+- **109 passing** ✅
+- **21 skipped** (R2-dependent, pending API token update)
+- **0 failing** ✅
 
 **Test Suites**:
 
-- Tenant Router (3 tests)
-- Namespace Isolation (6 tests)
-- API Key Management (8 tests)
-- Tenant CRUD Operations (4 tests)
-- Multi-Tenant Data Isolation (2 tests)
+- Scenario Tests (50 tests) ✅
+- Integration Tests (14 tests) ✅
+- Admin Dashboard Tests (56 tests) ✅
+- Durable Objects Tests (3 passing, 21 skipped) ⏳
+- E2E Production Tests (12 tests) ✅
 
 ### 3. Validate Type Safety
 

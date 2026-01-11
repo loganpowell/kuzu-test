@@ -7,9 +7,11 @@ The Admin Dashboard API is now fully implemented as **Phase 1, Week 2** of the R
 ## What Was Built
 
 ### 1. **Admin Dashboard Service** (`cf-auth/src/routes/admin/dashboard.ts`)
+
 A complete Hono router with 8 REST endpoints for platform administration:
 
 #### Tenant Management (5 endpoints)
+
 - `POST /admin/tenants` - Create new tenant with auto-generated API keys
 - `GET /admin/tenants` - List all tenants with pagination
 - `GET /admin/tenants/:id` - Get tenant details with stats
@@ -17,17 +19,22 @@ A complete Hono router with 8 REST endpoints for platform administration:
 - `DELETE /admin/tenants/:id` - Soft delete tenant
 
 #### API Key Management (2 endpoints)
+
 - `GET /admin/tenants/:id/keys` - List all keys for a tenant
 - `POST /admin/tenants/:id/keys` - Create new API key
 
 #### Metrics (1 endpoint)
+
 - `GET /admin/metrics` - Get platform-wide usage metrics
 
 #### System Status (1 bonus endpoint)
+
 - `GET /admin/dashboard` - Get dashboard overview with metrics
 
 ### 2. **Complete Test Suite** (`cf-auth/tests/admin-dashboard.test.ts`)
+
 1,500+ lines of comprehensive tests covering:
+
 - Tenant CRUD operations and validation
 - API key generation and security
 - Hierarchical tenant structures (up to 5 levels)
@@ -37,7 +44,9 @@ A complete Hono router with 8 REST endpoints for platform administration:
 - Response formatting and error codes
 
 ### 3. **Documentation** (`cf-auth/src/routes/admin/README.md`)
+
 Production-ready documentation including:
+
 - Endpoint specifications with examples
 - Request/response formats with full samples
 - Query parameters and pagination
@@ -47,6 +56,7 @@ Production-ready documentation including:
 - Integration patterns
 
 ### 4. **Integration with Main Worker**
+
 - Updated `cf-auth/src/index.ts` to wire up admin routes
 - Properly mounted under `/admin` path
 - Full Hono type safety preserved
@@ -54,6 +64,7 @@ Production-ready documentation including:
 ## Key Features
 
 ### Tenant Hierarchy Support
+
 ```
 Root Tenant (depth: 0)
   └─ Department (depth: 1)
@@ -61,11 +72,13 @@ Root Tenant (depth: 0)
       └─ Team (depth: 3)
         └─ Subteam (depth: 4)
 ```
+
 - Maximum 5 levels deep
 - Each sub-tenant inherits permissions from parent
 - Prevents circular references automatically
 
 ### API Key Security
+
 - **Types**: Public (client-side), Secret (backend), Restricted (scoped)
 - **Environments**: Live (production), Test (sandbox)
 - **Secret handling**: Only shown once in creation response
@@ -73,12 +86,14 @@ Root Tenant (depth: 0)
 - **Revocation**: Soft delete preserves audit trail
 
 ### Multi-Tenant Isolation
+
 - All admin operations scoped to tenant
 - Platform admin key required for all endpoints
 - Namespace prefixes prevent accidental cross-tenant data leakage
 - Database constraints enforce uniqueness per tenant
 
 ### Data Validation
+
 - Slug format: lowercase alphanumeric + hyphens only
 - Email validation for platform admins
 - Plan validation: `free`, `pro`, `enterprise`
@@ -88,21 +103,25 @@ Root Tenant (depth: 0)
 ## Architecture Decisions
 
 ### 1. **Soft Deletes Only**
+
 - Set `status: "deleted"` instead of hard delete
 - Preserves audit trail and data recovery capability
 - Allows checking what was removed and when
 
 ### 2. **Hierarchical Tenant Support**
+
 - Graphs-of-graphs: tenants can contain sub-tenants
 - Used for multi-level organizations (company → departments → projects)
 - Parent references enable permission inheritance
 
 ### 3. **API Key as Primary Credential**
+
 - Type-based access control (public vs secret)
 - Environment separation (live vs test)
 - Permissions scoping for fine-grained control
 
 ### 4. **Stateless Architecture**
+
 - No sessions needed for admin API
 - Every request authenticated with API key
 - Scales horizontally on Cloudflare Workers
@@ -116,6 +135,7 @@ npm run test -- admin-dashboard.test.ts
 ```
 
 Test categories:
+
 - **Authentication**: Validates API key requirements
 - **Tenant Operations**: CRUD, hierarchy, validation
 - **API Keys**: Creation, rotation, revocation
@@ -128,6 +148,7 @@ Test categories:
 ## API Examples
 
 ### Create Tenant
+
 ```bash
 curl -X POST https://api.yourdomain.com/admin/tenants \
   -H "Authorization: Bearer sk_secret_..." \
@@ -142,6 +163,7 @@ curl -X POST https://api.yourdomain.com/admin/tenants \
 ```
 
 ### Create Sub-tenant
+
 ```bash
 curl -X POST https://api.yourdomain.com/admin/tenants \
   -H "Authorization: Bearer sk_secret_..." \
@@ -154,12 +176,14 @@ curl -X POST https://api.yourdomain.com/admin/tenants \
 ```
 
 ### List Tenants
+
 ```bash
 curl https://api.yourdomain.com/admin/tenants?page=1&limit=20 \
   -H "Authorization: Bearer sk_secret_..."
 ```
 
 ### Generate API Key
+
 ```bash
 curl -X POST https://api.yourdomain.com/admin/tenants/tenant:acme/keys \
   -H "Authorization: Bearer sk_secret_..." \
@@ -175,12 +199,14 @@ curl -X POST https://api.yourdomain.com/admin/tenants/tenant:acme/keys \
 ## Commits Made
 
 ### cf-auth Submodule
+
 - **7966127**: `feat: add admin dashboard API for tenant and API key management`
   - Added: 1,200 lines of admin API code
-  - Added: 1,500 lines of tests  
+  - Added: 1,500 lines of tests
   - Added: 300 lines of documentation
 
 ### Root Repository
+
 - **cda5ec8**: `chore: update cf-auth submodule with admin dashboard API`
   - Updated submodule pointer to new commit
 
@@ -215,21 +241,25 @@ cf-auth/
 ## Next Steps (Phase 1, Week 2 Continued)
 
 1. **Apply D1 Migration** (blocking prerequisite)
+
    ```bash
    npx drizzle-kit push
    ```
 
 2. **Run Integration Tests**
+
    ```bash
    npm test
    ```
 
 3. **Test Admin API Locally**
+
    - Start worker: `npm run dev`
    - Use curl examples above
    - Verify tenant creation with API keys
 
 4. **Build Durable Objects** (next feature)
+
    - Per-tenant state management
    - Real-time sync from R2 CSV
    - Subscription management
@@ -244,18 +274,21 @@ cf-auth/
 ## Security Notes
 
 ### API Key Protection
+
 - Never expose secret keys in logs or responses (except creation)
 - Always use HTTPS for production
 - Implement rate limiting (100 requests/minute per admin key)
 - Rotate admin keys regularly
 
 ### Tenant Isolation
+
 - Verify tenant ID matches request scope
 - Use D1 namespacing (ID prefixes)
 - Log all administrative operations
 - Audit trail preserved with soft deletes
 
 ### Database Security
+
 - Secrets hashed with SHA256
 - Keys stored in D1 (encrypted at rest by Cloudflare)
 - No plaintext secrets in responses (except creation)
@@ -264,6 +297,7 @@ cf-auth/
 ## Deployment
 
 The Admin Dashboard API is ready for:
+
 1. **Development**: Already integrated in main worker
 2. **Testing**: Run full test suite before deployment
 3. **Staging**: Deploy to staging worker first
@@ -272,6 +306,7 @@ The Admin Dashboard API is ready for:
 ## Monitoring & Observability
 
 Recommended metrics to track:
+
 - Tenant creation rate
 - API key generation rate
 - Admin API error rate
@@ -303,6 +338,7 @@ Recommended metrics to track:
 ## Summary
 
 **Admin Dashboard API** is now a fully functional platform administration interface with:
+
 - 8 REST endpoints for tenant and API key management
 - 1,500+ lines of comprehensive tests
 - Production-ready documentation
@@ -314,6 +350,7 @@ Recommended metrics to track:
 The API is ready for immediate use in development and can be deployed to production after running the D1 migration and test suite.
 
 **Lines of Code Added**: ~2,500
+
 - Implementation: 400+ lines
 - Tests: 1,500+ lines
 - Documentation: 300+ lines
