@@ -12,6 +12,117 @@ Enable **customer self-service schema management** with visual editor, hot reloa
 
 **Key Innovation:** Time to add entity type: **2-3 minutes** (down from 2-4 hours of manual coding).
 
+**⚠️ Critical Migration:** Transform from single-tenant hardcoded schema to **true multi-tenant SaaS** with per-customer dynamic schemas.
+
+---
+
+## 🏗️ Migration Context
+
+### Current State (Phase 0/1)
+
+**Architecture Assumption:** Single tenant with hardcoded schema
+
+```typescript
+// Hardcoded in GraphStateCSV.ts, client.ts, SDK, etc.
+const ENTITIES = ["User", "Group", "Resource"];
+const RELATIONSHIPS = ["member_of", "inherits_from", "has_permission"];
+```
+
+**Problems:**
+
+1. ❌ **Not truly multi-tenant** - All customers share same schema
+2. ❌ **No schema isolation** - Can't customize per customer
+3. ❌ **Hardcoded everywhere** - Schema baked into DO, worker, client, SDK
+4. ❌ **No versioning** - Schema changes break existing deployments
+5. ❌ **Manual migration** - Adding entity = code changes + redeployment
+
+### Target State (Phase 2)
+
+**Architecture:** True SaaS multi-tenancy with per-customer schemas
+
+```typescript
+// Dynamic schema per organization
+const schema = await fetchSchema(orgId); // Each org has custom entities
+await createTablesFromSchema(schema); // Generate SQL from YAML
+```
+
+**Solutions:**
+
+1. ✅ **True multi-tenant** - Each customer (org) has own schema
+2. ✅ **Schema isolation** - Org A: User/Document, Org B: Team/Project
+3. ✅ **Dynamic loading** - Schema stored separately, loaded at runtime
+4. ✅ **Versioning** - Schema v1, v2, v3 with rollback support
+5. ✅ **Self-service** - Customers edit schema via UI, instant hot reload
+
+---
+
+## 🔄 Multi-Tenant Migration Strategy
+
+### Data Model Changes
+
+**Current (Single-Tenant):**
+
+```
+R2: graph-state-{env}/
+  └── org_default/
+      ├── users.csv
+      ├── groups.csv
+      └── resources.csv
+
+Durable Object: GraphStateCSV (one schema for all)
+```
+
+**Target (Multi-Tenant SaaS):**
+
+```
+R2: graph-state-{env}/
+  ├── {orgId}/
+  │   ├── schema.json              # Compiled schema
+  │   ├── schema-versions/
+  │   │   ├── v1.json
+  │   │   ├── v2.json
+  │   │   └── v3.json
+  │   └── data/
+  │       ├── {EntityType1}.csv
+  │       ├── {EntityType2}.csv
+  │       └── {RelationshipType}.csv
+  └── system/
+      ├── orgs.csv                  # Tenant registry
+      └── schema-registry.json      # Global schema catalog
+
+Durable Object: GraphStateCSV per org (each loads own schema)
+```
+
+### Infrastructure Migration Steps
+
+**Week 1-2: Add Schema Storage**
+
+1. Create schema storage structure in R2
+2. Add schema version DO for each org
+3. Migrate existing hardcoded schema to YAML for `org_default`
+4. Store compiled schema in R2
+
+**Week 3-4: Update Durable Objects**
+
+1. Add schema loading to `GraphStateCSV`
+2. Make table creation dynamic based on schema
+3. Update indexes to support arbitrary entity types
+4. Add schema version tracking
+
+**Week 5-6: Update Worker & SDKs**
+
+1. Add `/org/{orgId}/schema` endpoint
+2. Update server SDK with generic methods
+3. Update client SDK with dynamic schema support
+4. Add backward compatibility layer
+
+**Week 7-8: Data Migration**
+
+1. Migrate existing data to new structure
+2. Create tenant registry
+3. Set up default schema for existing orgs
+4. Test multi-tenant isolation
+
 ---
 
 ## 📊 Progress Tracking
@@ -64,9 +175,295 @@ metrics:view → relish:operator
 
 ---
 
+---
+
 ## 📋 Task List
 
-### 2.1 Schema Validation Rules (Week 1)
+### 2.0 Multi-Tenant Infrastructure Foundation (Week 1-2) **NEW**
+
+**Goal:** Build fresh multi-tenant infrastructure using Phase 0/1 as reference patterns
+
+**🎯 Fresh Start:** No existing customers means we can build multi-tenant architecture from scratch without migration complexity.
+
+**Reference Implementations (Phase 0/1):**
+
+- **Durable Objects** (`cloudflare/worker/src/durable-objects/GraphStateCSV.ts`)
+  - ✅ Good patterns: Map-based indexes, CSV loading, WebSocket sync, version tracking
+  - 🔄 Adapt: Remove hardcoded schema, add dynamic schema loading
+- **Worker** (`cloudflare/worker/src/index.ts`)
+  - ✅ Good patterns: Per-org routing (`/org/{orgId}/*`), DO coordination
+  - ➕ Add: Schema endpoints, tenant registry
+- **Pulumi** (`cloudflare/pulumi/index.ts`)
+  - ✅ Good patterns: R2 bucket, KV namespace, DO bindings, Worker deployment
+  - ➕ Keep infrastructure, add tenant management
+- **SDKs**
+  - Server SDK: Reference HTTP client patterns, rebuild with `can(subject, capability, object)`
+  - Client SDK: Reference WASM loading patterns, rebuild with dynamic `createSchemaFromDefinition()`
+
+#### Implementation Tasks
+
+- [ ] **Implement multi-tenant R2 storage structure**
+
+  ```typescript
+  // New GraphStateCSV for multi-tenant (reference existing implementation)
+  async ensureStorageStructure(orgId: string): Promise<void> {
+    // Check if org schema exists
+    const schemaKey = `${orgId}/schema/current.json`;
+    const schemaExists = await this.env.GRAPH_STATE.head(schemaKey);
+
+    if (!schemaExists) {
+      // Create default schema for new org
+      const defaultSchema = this.getDefaultSchema();
+      await this.env.GRAPH_STATE.put(
+        `${orgId}/schema/v1.compiled.json`,
+        JSON.stringify(defaultSchema)
+      );
+      await this.env.GRAPH_STATE.put(
+        `${orgId}/schema/current.txt`,
+        'v1'
+      );
+    }
+  }
+
+  private getDefaultSchema(): CompiledSchema {
+    // Default schema matches current hardcoded entities
+    return {
+      version: 1,
+      entities: [
+        {
+          name: 'User',
+          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
+          createTableSQL: 'CREATE NODE TABLE User(id STRING, PRIMARY KEY(id))'
+        },
+        {
+          name: 'Group',
+          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
+          createTableSQL: 'CREATE NODE TABLE Group(id STRING, PRIMARY KEY(id))'
+        },
+        {
+          name: 'Resource',
+          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
+          createTableSQL: 'CREATE NODE TABLE Resource(id STRING, PRIMARY KEY(id))'
+        }
+      ],
+      relationships: [
+        {
+          name: 'member_of',
+          from: 'User',
+          to: 'Group',
+          createRelTableSQL: 'CREATE REL TABLE member_of(FROM User TO Group)'
+        },
+        {
+          name: 'has_permission',
+          from: 'User',
+          to: 'Resource',
+          properties: [{ name: 'permission', type: 'STRING' }],
+          createRelTableSQL: 'CREATE REL TABLE has_permission(FROM User TO Resource, permission STRING)'
+        }
+      ],
+      indexes: []
+    };
+  }
+  ```
+
+- [ ] **Add schema loading to GraphStateCSV**
+
+  ```typescript
+  export class GraphStateCSV {
+    private schema?: CompiledSchema;
+    private schemaVersion: number = 0;
+
+    async ensureInitialized(): Promise<void> {
+      if (this.initialized) return;
+
+      // Load schema from R2
+      await this.loadSchema();
+
+      // Load data based on schema
+      await this.loadDataForSchema();
+
+      this.initialized = true;
+    }
+
+    private async loadSchema(): Promise<void> {
+      const schemaKey = `${this.orgId}/schema.json`;
+      const schemaObj = await this.env.GRAPH_STATE.get(schemaKey);
+
+      if (!schemaObj) {
+        // Create default schema
+        await this.ensureStorageStructure(this.orgId);
+        const schemaObj = await this.env.GRAPH_STATE.get(schemaKey);
+      }
+
+      this.schema = JSON.parse(await schemaObj!.text());
+      this.schemaVersion = this.schema.version;
+    }
+
+    private async loadDataForSchema(): Promise<void> {
+      if (!this.schema) throw new Error("Schema not loaded");
+
+      // Dynamically load CSV files based on schema entities
+      for (const entity of this.schema.entities) {
+        const csvKey = `${this.orgId}/data/${entity.name}.csv`;
+        const csvObj = await this.env.GRAPH_STATE.get(csvKey);
+        if (csvObj) {
+          const csv = await csvObj.text();
+          await this.loadEntityCSV(entity.name, csv);
+        }
+      }
+    }
+  }
+  ```
+
+- [ ] **Make indexes dynamic instead of hardcoded**
+
+  ```typescript
+  // BEFORE (Hardcoded):
+  private memberOfIndex = new Map<string, Set<string>>();
+  private inheritsFromIndex = new Map<string, string>();
+  private userPermIndex = new Map<string, Map<string, Permission>>();
+  private groupPermIndex = new Map<string, Map<string, Permission>>();
+
+  // AFTER (Dynamic):
+  private entityIndexes = new Map<string, Map<string, any>>();  // entity name -> id -> data
+  private relationshipIndexes = new Map<string, Map<string, Set<string>>>();  // rel name -> from -> to set
+
+  private getOrCreateEntityIndex(entityName: string) {
+    if (!this.entityIndexes.has(entityName)) {
+      this.entityIndexes.set(entityName, new Map());
+    }
+    return this.entityIndexes.get(entityName)!;
+  }
+
+  private getOrCreateRelationshipIndex(relName: string) {
+    if (!this.relationshipIndexes.has(relName)) {
+      this.relationshipIndexes.set(relName, new Map());
+    }
+    return this.relationshipIndexes.get(relName)!;
+  }
+  ```
+
+- [ ] **Add schema endpoint to Worker**
+
+  ```typescript
+  // In index.ts
+  if (path === `/org/${orgId}/schema`) {
+    const id = env.GRAPH_STATE_DO.idFromName(orgId);
+    const stub = env.GRAPH_STATE_DO.get(id);
+    return await stub.fetch(request);
+  }
+
+  // In GraphStateCSV.ts
+  async handleGetSchema(): Promise<Response> {
+    await this.ensureInitialized();
+    return this.jsonResponse({
+      version: this.schemaVersion,
+      schema: this.schema
+    });
+  }
+  ```
+
+- [ ] **Create tenant registry**
+
+  ```typescript
+  // New file: cloudflare/worker/src/services/tenant-registry.ts
+  export interface Tenant {
+    id: string;
+    name: string;
+    schemaVersion: number;
+    createdAt: string;
+    status: "active" | "suspended" | "trial";
+    plan: "free" | "starter" | "pro" | "enterprise";
+  }
+
+  export class TenantRegistry {
+    constructor(private kv: KVNamespace, private r2: R2Bucket) {}
+
+    async getTenant(orgId: string): Promise<Tenant | null> {
+      const data = await this.kv.get(`tenant:${orgId}`);
+      return data ? JSON.parse(data) : null;
+    }
+
+    async createTenant(tenant: Tenant): Promise<void> {
+      await this.kv.put(`tenant:${tenant.id}`, JSON.stringify(tenant));
+
+      // Initialize default schema for new tenant
+      const defaultSchema = getDefaultSchema();
+      await this.r2.put(
+        `${tenant.id}/schema.json`,
+        JSON.stringify(defaultSchema)
+      );
+    }
+
+    async listTenants(): Promise<Tenant[]> {
+      const list = await this.kv.list({ prefix: "tenant:" });
+      const tenants = await Promise.all(
+        list.keys.map(async (key) => {
+          const data = await this.kv.get(key.name);
+          return JSON.parse(data!);
+        })
+      );
+      return tenants;
+    }
+  }
+  ```
+
+- [ ] **Add backward compatibility for existing data**
+
+  ```typescript
+  async migrateExistingData(): Promise<void> {
+    // Check if data exists in old structure (root level)
+    const oldUsers = await this.env.GRAPH_STATE.get('users.csv');
+
+    if (oldUsers && !this.schema) {
+      console.log(`[Migration] Migrating org_default to new structure`);
+
+      // Create default schema
+      await this.ensureStorageStructure('org_default');
+
+      // Move CSV files to new location
+      const files = ['users.csv', 'groups.csv', 'resources.csv',
+                     'member_of.csv', 'user_permissions.csv', 'group_permissions.csv'];
+
+  ```
+
+- [ ] **Add default schema template**
+
+  ````typescript
+  // Default schema for new tenants (similar to Phase 1 proof-of-concept)
+  function getDefaultSchema(): CompiledSchema {
+    return {
+      version: 1,
+      entities: [
+        {
+          name: 'User',
+          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
+          createTableSQL: 'CREATE NODE TABLE User(id STRING, PRIMARY KEY(id))'
+        },
+        {
+          name: 'Group',
+          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
+          createTableSQL: 'CREATE NODE TABLE Group(id STRING, PRIMARY KEY(id))'
+        },
+        {
+          name: 'Resource',
+          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
+          createTableSQL: 'CREATE NODE TABLE Resource(id STRING, PRIMARY KEY(id))'\n        }\n      ],\n      relationships: [\n        {\n          name: 'member_of',\n          from: 'User',\n          to: 'Group',\n          createRelTableSQL: 'CREATE REL TABLE member_of(FROM User TO Group)'\n        },\n        {\n          name: 'has_permission',\n          from: 'User',\n          to: 'Resource',\n          properties: [{ name: 'permission', type: 'STRING' }],\n          createRelTableSQL: 'CREATE REL TABLE has_permission(FROM User TO Resource, permission STRING)'\n        }\n      ],\n      indexes: []\n    };\n  }\n  ```
+  ````
+
+#### Acceptance Criteria
+
+- ✅ Multi-tenant R2 structure implemented (per-org schema + data)
+- ✅ Schema loaded dynamically from R2 per org
+- ✅ Indexes created dynamically based on schema
+- ✅ `/org/{orgId}/schema` endpoint working
+- ✅ Tenant registry operational with create/list/get
+- ✅ Default schema template creates valid structure
+- ✅ Unit tests passing for new multi-tenant code
+
+---
+
+### 2.1 Schema Validation Rules (Week 3)
 
 **Current Status:** Schema format defined (90%), validation incomplete
 
@@ -476,6 +873,373 @@ schema/compiler/
 
 ---
 
+---
+
+### 📦 Impact on Server SDK (`cloudflare/sdk/`)
+
+**Critical:** Server SDK also needs updates for schema-driven architecture.
+
+#### Current Server SDK Implementation (Hardcoded)
+
+```typescript
+// cloudflare/sdk/src/index.ts
+export class AuthClient {
+  async check(request: CheckPermissionRequest): Promise<boolean> {
+    // Hardcoded: assumes "user", "permission", "resource" entities
+    const response = await this.request<CheckPermissionResponse>(
+      "check",
+      "GET",
+      {
+        params: {
+          user: request.user, // Assumes "user" entity exists
+          permission: request.permission,
+          resource: request.resource, // Assumes "resource" entity exists
+        },
+      }
+    );
+    return response.allowed;
+  }
+
+  async grant(request: GrantPermissionRequest): Promise<void> {
+    // Hardcoded: assumes specific permission structure
+    await this.request("grant", "POST", { body: request });
+  }
+}
+```
+
+**Problem:** This SDK assumes:
+
+- Entity types: "user", "resource"
+- Relationships: "has_permission"
+- Fixed API structure
+
+With Phase 2, customers define **custom entities** (Document, Project, Team, etc.)
+
+#### Phase 2 Requirements (Dynamic)
+
+**Option 1: Generic Schema-Aware Methods**
+
+```typescript
+// cloudflare/sdk/src/index.ts
+export class AuthClient {
+  private schema?: CompiledSchema;
+
+  constructor(config: AuthClientConfig) {
+    // ... existing config
+  }
+
+  // Fetch organization's schema on initialization
+  async initialize(): Promise<void> {
+    const response = await fetch(`${this.config.workerUrl}/schema`);
+    this.schema = await response.json();
+  }
+
+  // Generic check method - works with any schema
+  async can(
+    subject: string, // e.g., "user:alice" or "team:engineering"
+    capability: string, // e.g., "read", "write", "admin"
+    object: string // e.g., "doc:readme" or "project:alpha"
+  ): Promise<boolean> {
+    const response = await this.request<{ allowed: boolean }>("can", "GET", {
+      params: { subject, capability, object },
+    });
+    return response.allowed;
+  }
+
+  // Generic grant method
+  async grant(
+    subject: string,
+    capability: string,
+    object: string
+  ): Promise<void> {
+    await this.request("grant", "POST", {
+      body: { subject, capability, object },
+    });
+  }
+
+  // Generic revoke method
+  async revoke(
+    subject: string,
+    capability: string,
+    object: string
+  ): Promise<void> {
+    await this.request("revoke", "POST", {
+      body: { subject, capability, object },
+    });
+  }
+
+  // Query all objects a subject can access
+  async listAccessible(
+    subject: string,
+    capability: string,
+    objectType?: string // Optional: filter by entity type
+  ): Promise<string[]> {
+    const response = await this.request<{ objects: string[] }>(
+      "list-accessible",
+      "GET",
+      {
+        params: { subject, capability, objectType },
+      }
+    );
+    return response.objects;
+  }
+
+  // Query all subjects that can access an object
+  async listAccessors(
+    object: string,
+    capability?: string // Optional: filter by capability
+  ): Promise<Array<{ subject: string; capability: string }>> {
+    const response = await this.request<{
+      accessors: Array<{ subject: string; capability: string }>;
+    }>("list-accessors", "GET", { params: { object, capability } });
+    return response.accessors;
+  }
+}
+```
+
+**Option 2: Type-Safe Generated SDK (Advanced)**
+
+```typescript
+// Generated from customer's schema at build time
+import { AuthClient } from "@kuzu-auth/sdk";
+import type { SchemaTypes } from "./generated/schema-types";
+
+const client = new AuthClient<SchemaTypes>({
+  workerUrl: "https://auth.example.com",
+  schemaVersion: "2.1.0",
+});
+
+// Type-safe methods generated from schema
+await client.user.can("user:alice", "read", "document:readme");
+await client.document.grant("user:alice", "write", "document:readme");
+await client.team.listMembers("team:engineering");
+
+// Schema types provide full autocomplete
+type User = SchemaTypes["User"];
+type Document = SchemaTypes["Document"];
+```
+
+#### Backward Compatibility Strategy
+
+```typescript
+export class AuthClient {
+  // Keep old methods for backward compatibility (deprecated)
+  /** @deprecated Use can() instead */
+  async check(request: CheckPermissionRequest): Promise<boolean> {
+    return this.can(request.user, request.permission, request.resource);
+  }
+
+  /** @deprecated Use grant() instead */
+  async grantPermission(request: GrantPermissionRequest): Promise<void> {
+    return this.grant(request.user, request.permission, request.resource);
+  }
+
+  // New schema-aware methods
+  async can(
+    subject: string,
+    capability: string,
+    object: string
+  ): Promise<boolean> {
+    // ... implementation
+  }
+}
+```
+
+#### Migration Path for Server SDK
+
+**Phase 2 Timeline:**
+
+1. **Week 1-2:** Add generic methods (`can`, `grant`, `revoke`) alongside existing
+2. **Week 3:** Add schema fetching on initialization
+3. **Week 4:** Deprecate old methods (`check`, `grantPermission`)
+4. **Week 5:** Update documentation and examples
+5. **Week 6:** Publish v2.0.0 with breaking changes
+6. **Week 7+:** Migrate existing users to new API
+
+**Version Strategy:**
+
+- v1.x: Current hardcoded API (deprecated)
+- v2.x: Schema-aware generic API (recommended)
+- v3.x: Type-safe generated SDK (future)
+
+---
+
+### 📦 Impact on Phase 1 Client SDK
+
+**Critical:** Phase 2 schema infrastructure requires changes to Phase 1 client SDK.
+
+#### Current Phase 1 Implementation (Hardcoded)
+
+```typescript
+// client/src/client.ts
+class KuzuAuthClient {
+  async createSchema(): Promise<void> {
+    // Hardcoded schema
+    await this.conn.execute(`CREATE NODE TABLE User(...)`);
+    await this.conn.execute(`CREATE NODE TABLE Group(...)`);
+    await this.conn.execute(`CREATE NODE TABLE Resource(...)`);
+  }
+}
+```
+
+#### Phase 2 Requirements (Dynamic)
+
+```typescript
+// client/src/client.ts
+class KuzuAuthClient {
+  private currentSchemaVersion: number = 0;
+
+  async initialize(orgId: string): Promise<void> {
+    // Fetch organization's compiled schema
+    const schema = await this.fetchCompiledSchema(orgId);
+    await this.createSchemaFromDefinition(schema);
+
+    // Subscribe to schema updates
+    this.subscribeToSchemaUpdates();
+  }
+
+  async createSchemaFromDefinition(schema: CompiledSchema): Promise<void> {
+    // Create tables from compiled schema
+    for (const entity of schema.entities) {
+      await this.conn.execute(entity.createTableSQL);
+    }
+    for (const rel of schema.relationships) {
+      await this.conn.execute(rel.createRelTableSQL);
+    }
+    for (const index of schema.indexes) {
+      await this.conn.execute(index.createIndexSQL);
+    }
+
+    this.currentSchemaVersion = schema.version;
+  }
+
+  async handleSchemaUpdate(newSchema: CompiledSchema): Promise<void> {
+    // Hot reload: Apply schema changes without full reload
+    const migration = this.computeSchemaMigration(
+      this.currentSchemaVersion,
+      newSchema.version
+    );
+
+    // Apply incremental changes
+    for (const change of migration.changes) {
+      if (change.type === "add_entity") {
+        await this.conn.execute(change.createTableSQL);
+      } else if (change.type === "add_field") {
+        await this.conn.execute(change.alterTableSQL);
+      } else if (change.type === "remove_entity") {
+        await this.conn.execute(change.dropTableSQL);
+      }
+    }
+
+    // Reload data for affected entities
+    await this.reloadAffectedData(migration.affectedEntities);
+
+    this.currentSchemaVersion = newSchema.version;
+  }
+
+  private async fetchCompiledSchema(orgId: string): Promise<CompiledSchema> {
+    const response = await fetch(
+      `${this.serverUrl}/org/${orgId}/schema/compiled`
+    );
+    return response.json();
+  }
+
+  private subscribeToSchemaUpdates(): void {
+    this.wsManager.on("schema_update", async (message) => {
+      const newSchema = message.schema;
+      await this.handleSchemaUpdate(newSchema);
+    });
+  }
+}
+```
+
+#### New Types Required
+
+```typescript
+// client/src/types/schema.ts
+export interface CompiledSchema {
+  version: number;
+  entities: EntityDefinition[];
+  relationships: RelationshipDefinition[];
+  indexes: IndexDefinition[];
+}
+
+export interface EntityDefinition {
+  name: string;
+  fields: FieldDefinition[];
+  createTableSQL: string; // Generated by compiler
+}
+
+export interface RelationshipDefinition {
+  name: string;
+  from: string;
+  to: string;
+  properties: FieldDefinition[];
+  createRelTableSQL: string; // Generated by compiler
+}
+
+export interface IndexDefinition {
+  entity: string;
+  field: string;
+  createIndexSQL: string; // Generated by compiler
+}
+
+export interface SchemaMigration {
+  fromVersion: number;
+  toVersion: number;
+  changes: SchemaChange[];
+  affectedEntities: string[];
+}
+
+export interface SchemaChange {
+  type:
+    | "add_entity"
+    | "remove_entity"
+    | "add_field"
+    | "remove_field"
+    | "modify_field";
+  entity: string;
+  field?: string;
+  createTableSQL?: string;
+  alterTableSQL?: string;
+  dropTableSQL?: string;
+}
+```
+
+#### Migration Path
+
+**Phase 1 → Phase 2 Transition:**
+
+1. **Week 1-2:** Keep hardcoded schema working
+2. **Week 3:** Add `createSchemaFromDefinition()` alongside `createSchema()`
+3. **Week 4:** Add schema fetching from server
+4. **Week 5:** Add hot reload support
+5. **Week 6:** Deprecate hardcoded `createSchema()`
+6. **Week 7:** Remove hardcoded schema (breaking change)
+
+**Backward Compatibility:**
+
+```typescript
+// Support both hardcoded and dynamic schemas during transition
+class KuzuAuthClient {
+  constructor(config: ClientConfig) {
+    this.useDynamicSchema = config.dynamicSchema ?? false;
+  }
+
+  async initialize(): Promise<void> {
+    if (this.useDynamicSchema) {
+      const schema = await this.fetchCompiledSchema(this.orgId);
+      await this.createSchemaFromDefinition(schema);
+    } else {
+      // Fallback to hardcoded schema
+      await this.createSchema();
+    }
+  }
+}
+```
+
+---
+
 ### 2.3 Hot Reload System (Week 4-5)
 
 **Goal:** Runtime schema updates without downtime
@@ -489,6 +1253,31 @@ Schema Upload → Validation → Compilation → Version Storage → Activation 
 ```
 
 #### Tasks
+
+- [ ] **Update server SDK for dynamic schemas** (`cloudflare/sdk/src/index.ts`)
+
+  - [ ] Add `can(subject, capability, object)` generic method
+  - [ ] Add `grant(subject, capability, object)` generic method
+  - [ ] Add `revoke(subject, capability, object)` generic method
+  - [ ] Add `listAccessible(subject, capability, objectType?)` method
+  - [ ] Add `listAccessors(object, capability?)` method
+  - [ ] Add `initialize()` to fetch schema on startup
+  - [ ] Deprecate old methods (`check`, `grantPermission`, `revokePermission`)
+  - [ ] Add backward compatibility layer
+  - [ ] Update TypeScript types for generic API
+  - [ ] Update tests for new API
+  - [ ] Update README with migration guide
+  - [ ] Publish v2.0.0 with breaking changes
+
+- [ ] **Update client SDK for dynamic schemas** (`client/src/client.ts`)
+
+  - [ ] Add `createSchemaFromDefinition()` method
+  - [ ] Add `handleSchemaUpdate()` for hot reload
+  - [ ] Add `computeSchemaMigration()` for incremental updates
+  - [ ] Add `reloadAffectedData()` for changed entities
+  - [ ] Add `fetchCompiledSchema()` API call
+  - [ ] Update `initialize()` to support dynamic schemas
+  - [ ] Add backward compatibility flag
 
 - [ ] **Create schema version storage** (Durable Object)
 
@@ -684,6 +1473,7 @@ Schema Upload → Validation → Compilation → Version Storage → Activation 
   ```
 
 - [ ] **Add rollback mechanism**
+
   ```typescript
   async rollback(toVersion: number): Promise<void> {
     // Validate version exists
