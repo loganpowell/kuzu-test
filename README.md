@@ -13,7 +13,7 @@ Secure edge-based authorization system using KuzuDB WASM client-side with Cloudf
 
 All documentation has been organized in the [`docs/`](./docs/) directory:
 
-- **Architecture**: [High-level system architecture](./docs/multi-tenant-migration/ARCHITECTURE.md) ⭐ **Start here!**
+- **Architecture**: [High-level system architecture](./docs/multi-tenant-migration/archive/ARCHITECTURE.md) ⭐ **Start here!**
 - **Security**: [Edge-based validation architecture](./docs/security/SECURITY_ARCHITECTURE_CONCISE.md)
 - **E2E Examples**: [Full-stack authorization examples](./docs/security/FULL_STACK_EXAMPLE_COMPLETE.md)
 - **Development**: [TDD Quick Start](./docs/security/QUICKSTART_TDD.md)

@@ -2247,7 +2247,7 @@ Consistency: Strong (distributed consensus)
 
 **Graph Database (Our Client-Side Engine):**
 
-- [KuzuDB Official Site](https://kuzudb.com/)
+- [KuzuDB Official Site](https://kuzudb.github.io/)
 - [KuzuDB GitHub](https://github.com/kuzudb/kuzu)
 - [KuzuDB WASM Documentation](https://docs.kuzudb.com/client-apis/javascript/)
 - [Cypher Query Language](https://neo4j.com/docs/cypher-manual/current/)

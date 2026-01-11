@@ -248,7 +248,7 @@ source ~/emsdk/emsdk_env.sh
 
 ## References
 
-- [Kuzu Documentation](https://kuzudb.com/docs)
+- [Kuzu Documentation](https://kuzudb.github.io/docs)
 - [Emscripten Docs](https://emscripten.org/docs/)
 - [Cloudflare Workers Docs](https://developers.cloudflare.com/workers/)
 - [ASYNCIFY Explained](https://emscripten.org/docs/porting/asyncify.html)

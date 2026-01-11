@@ -301,9 +301,88 @@ const canRead = await client.query(
 
 ---
 
-## 🏗️ Core Authorization Loop Architecture
+## 🏗️ System Architecture Overview
 
-The system operates through four main phases: **Initialization**, **Read** (authorization checks), **Update** (mutations), and **Synchronization**.
+The system consists of multiple integrated components working together to provide <1ms authorization checks with real-time synchronization.
+
+### High-Level Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        WEB[Web Apps<br/>Next.js/React]
+        TAURI[Desktop Apps<br/>Tauri]
+        WASM[KuzuDB WASM<br/>Local Graph]
+        SDK[Client SDK<br/>Auth API]
+
+        WEB --> SDK
+        TAURI --> SDK
+        SDK --> WASM
+    end
+
+    subgraph "Admin Layer"
+        RELISH_UI[Relish Admin UI<br/>Tenant Management]
+        CUSTOMER_UI[Customer Admin UI<br/>Schema Management]
+        DEMO[Demo Apps<br/>Examples]
+
+        RELISH_UI -.->|Dogfooding| SDK
+        CUSTOMER_UI -.->|Dogfooding| SDK
+        DEMO -.->|Reference| SDK
+    end
+
+    subgraph "Edge Layer - Cloudflare"
+        WORKER[Worker<br/>API Gateway]
+        DO_PLATFORM[Platform DO<br/>Relish Ops]
+        DO_TENANT[Tenant DO<br/>Customer Graphs]
+        WS[WebSocket<br/>Real-time Sync]
+
+        WORKER --> DO_PLATFORM
+        WORKER --> DO_TENANT
+        DO_PLATFORM <--> WS
+        DO_TENANT <--> WS
+    end
+
+    subgraph "Storage Layer - Cloudflare"
+        R2[R2 Buckets<br/>CSV Files]
+        KV[KV Store<br/>Mutation Log]
+        D1[D1 Database<br/>Auth.js]
+
+        DO_PLATFORM --> R2
+        DO_TENANT --> R2
+        DO_PLATFORM --> KV
+        DO_TENANT --> KV
+        WORKER --> D1
+    end
+
+    subgraph "Infrastructure"
+        PULUMI[Pulumi<br/>IaC]
+        CI[GitHub Actions<br/>CI/CD]
+        MONITORING[Monitoring<br/>Analytics]
+
+        PULUMI -.->|Manages| WORKER
+        PULUMI -.->|Manages| R2
+        PULUMI -.->|Manages| KV
+        CI -.->|Deploys| WORKER
+        MONITORING -.->|Observes| WORKER
+    end
+
+    SDK <-->|Auth Checks| WORKER
+    SDK <-->|Mutations| WORKER
+    SDK <-->|Sync| WS
+
+    style WASM fill:#e1f5ff
+    style DO_PLATFORM fill:#fff4e1
+    style DO_TENANT fill:#fff4e1
+    style R2 fill:#e8f5e9
+    style KV fill:#f3e5f5
+    style D1 fill:#f3e5f5
+    style RELISH_UI fill:#ffe1e1
+    style CUSTOMER_UI fill:#ffe1e1
+```
+
+### Core Authorization Loop
+
+The authorization system operates through five main phases: **Initialization**, **Read** (authorization checks), **Update** (mutations), **Server Recovery**, and **Client Sync**.
 
 ```mermaid
 sequenceDiagram
@@ -1531,7 +1610,7 @@ A: Partial support exists (client has local copy). Full offline mode is Phase 3.
 - **[OpenFGA](https://openfga.dev/)** - Open source Zanzibar implementation
 - **[SpiceDB](https://authzed.com/spicedb)** - Another Zanzibar-inspired system
 - **[Ory Keto](https://www.ory.sh/keto/)** - Cloud-native access control
-- **[KuzuDB](https://kuzudb.com/)** - Embedded graph database we use
+- **[KuzuDB](https://kuzudb.github.io/)** - Embedded graph database we use
 
 ### Academic Papers
 
