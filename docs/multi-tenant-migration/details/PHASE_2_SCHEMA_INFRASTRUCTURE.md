@@ -1,8 +1,8 @@
 # Phase 2: Schema Infrastructure - Self-Service Schema Management
 
-**Status:** 18% Complete  
+**Status:** 40% Complete  
 **Duration:** 8-12 weeks  
-**Dependencies:** Phase 1 Core Loop (recommended 80%+)
+**Dependencies:** Phase 1 Core Loop (✅ Complete)
 
 ---
 
@@ -127,15 +127,16 @@ Durable Object: GraphStateCSV per org (each loads own schema)
 
 ## 📊 Progress Tracking
 
-| Component                      | Status         | Progress |
-| ------------------------------ | -------------- | -------- |
-| 2.1 Schema Format & Validation | 🟡 Partial     | 90%      |
-| 2.2 Schema Compiler            | ⏳ Not Started | 0%       |
-| 2.3 Hot Reload System          | ⏳ Not Started | 0%       |
-| 2.4 Customer Admin UI - Web    | ⏳ Not Started | 0%       |
-| 2.5 Customer Admin UI - Tauri  | ⏳ Not Started | 0%       |
-| 2.6 Relish Admin UI            | ⏳ Not Started | 0%       |
-| **Overall**                    | **🟠 Started** | **18%**  |
+| Component                       | Status             | Progress |
+| ------------------------------- | ------------------ | -------- |
+| 2.0 Multi-Tenant Infrastructure | ✅ Complete        | 100%     |
+| 2.1 Schema Format & Validation  | 🟡 Partial         | 90%      |
+| 2.2 Schema Compiler             | ⏳ Not Started     | 0%       |
+| 2.3 Hot Reload System           | ⏳ Not Started     | 0%       |
+| 2.4 Customer Admin UI - Web     | ⏳ Not Started     | 0%       |
+| 2.5 Customer Admin UI - Tauri   | ⏳ Not Started     | 0%       |
+| 2.6 Relish Admin UI             | ⏳ Not Started     | 0%       |
+| **Overall**                     | **🟡 In Progress** | **40%**  |
 
 ---
 
@@ -202,7 +203,77 @@ metrics:view → relish:operator
 
 #### Implementation Tasks
 
-- [ ] **Implement multi-tenant R2 storage structure**
+- [x] **Implement multi-tenant R2 storage structure** ✅
+
+  Schema types created in `cf-auth/src/types/schema.ts` with:
+
+  - CompiledSchema interface with entities, relationships, indexes
+  - EntityDefinition with field types and SQL generation
+  - RelationshipDefinition with properties and SQL generation
+  - getDefaultSchema() function for Phase 1 compatibility
+
+- [x] **Add schema loading to GraphStateCSV** ✅
+
+  Updated `cf-auth/src/durable-objects/GraphStateCSV.ts` with:
+
+  - ensureSchemaLoaded() method for per-org schema loading
+  - createDefaultSchema() for new organizations
+  - Schema storage in R2: `{orgId}/schema/current.json`
+  - Version tracking in R2: `{orgId}/schema/versions/v1.json`
+
+- [x] **Add schema endpoint to Worker** ✅
+
+  Added `/org/{orgId}/schema` endpoint to return compiled schema:
+
+  - Extracts orgId from URL path
+  - Loads schema before processing requests
+  - Returns JSON schema response
+
+- [x] **Make indexes dynamic instead of hardcoded** ✅
+
+  Replaced hardcoded Map structures with dynamic indexes that support arbitrary entity/relationship types:
+
+  ```typescript
+  // NEW: Dynamic indexes for arbitrary entity/relationship types
+  private entityIndexes = new Map<string, Map<string, any>>();  // entity name -> id -> entity data
+  private relationshipIndexes = new Map<string, Map<string, Set<string>>>();  // rel name -> from_id -> Set<to_id>
+
+  private getOrCreateEntityIndex(entityName: string): Map<string, any> {
+    if (!this.entityIndexes.has(entityName)) {
+      this.entityIndexes.set(entityName, new Map());
+    }
+    return this.entityIndexes.get(entityName)!;
+  }
+
+  private getOrCreateRelationshipIndex(relName: string): Map<string, Set<string>> {
+    if (!this.relationshipIndexes.has(relName)) {
+      this.relationshipIndexes.set(relName, new Map());
+    }
+    return this.relationshipIndexes.get(relName)!;
+  }
+  ```
+
+  Benefits:
+
+  - Supports any entity type (Team, Project, Author, Book, etc.)
+  - Supports any relationship type (works_on, wrote, contributes_to, treats, etc.)
+  - Each organization can have completely different schemas
+  - Indexes are populated during `loadDataFromSchema()`
+  - Tests validate custom entity/relationship types work correctly
+
+  Implementation Files:
+
+  - `cf-auth/src/durable-objects/GraphStateCSV.ts` - Dynamic index structures
+  - `cf-auth/tests/phase2-dynamic-indexes.test.ts` - Comprehensive tests
+
+  Test Coverage:
+
+  - ✅ Custom entity indexing (Team, Project)
+  - ✅ Custom relationship querying (works_on, wrote, contributes_to, treats)
+  - ✅ Multi-tenant schema isolation (different schemas per org)
+  - ✅ Dynamic data loading from CSVs
+
+- [ ] **Make indexes dynamic instead of hardcoded** ⛔ DEPRECATED - Replaced by above
 
   ```typescript
   // New GraphStateCSV for multi-tenant (reference existing implementation)
