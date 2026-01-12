@@ -1064,7 +1064,157 @@ export class AuthClient {
 
 ---
 
-### 📦 Impact on Phase 1 Client SDK
+### � Phase 1 Deferred Features
+
+**Context:** These features were identified during Phase 1 but deferred to Phase 2 for better integration with dynamic schema infrastructure.
+
+#### 2.X.1 Resource Accessors Query
+
+**Status:** Deferred from Phase 1  
+**Rationale:** This query depends on dynamic entity types, making it more suitable for Phase 2's dynamic schema system.
+
+**Implementation:**
+
+```typescript
+// client/src/client.ts
+async getResourceAccessors(resourceId: string): Promise<Accessor[]> {
+  // Dynamic query based on schema relationships
+  const schema = await this.getSchema();
+
+  return this.kuzu.query(`
+    MATCH (r:${schema.resourceEntity} {id: $resourceId})
+    MATCH (u:${schema.userEntity})-[:has_permission]->(r)
+    RETURN u.id AS userId, permission, 'direct' AS source
+    UNION
+    MATCH (g:${schema.groupEntity})-[:group_permission]->(r)
+    MATCH (u:${schema.userEntity})-[:member_of*]->(g)
+    RETURN u.id AS userId, permission, 'group' AS source
+  `, { resourceId });
+}
+```
+
+**Tasks:**
+
+- [ ] Add `getResourceAccessors()` method to client SDK
+- [ ] Support dynamic entity types from schema
+- [ ] Add tests for resource accessor queries
+- [ ] Document API in README
+
+---
+
+#### 2.X.2 Conflict Resolution for Optimistic Updates
+
+**Status:** Deferred from Phase 1  
+**Rationale:** Advanced feature requiring operational experience and monitoring to determine best conflict resolution strategies.
+
+**Implementation:**
+
+```typescript
+// client/src/optimistic-updater.ts
+async resolveConflict(
+  localMutation: Mutation,
+  serverMutation: Mutation
+): Promise<void> {
+  // Conflict resolution strategies:
+  // 1. Last-write-wins (default)
+  // 2. Server-always-wins (conservative)
+  // 3. Client-wins-if-newer (aggressive)
+  // 4. Custom merge logic (advanced)
+
+  const strategy = this.options.conflictResolution || 'last-write-wins';
+
+  switch (strategy) {
+    case 'last-write-wins':
+      if (serverMutation.timestamp > localMutation.timestamp) {
+        await this.rollbackMutation(localMutation.id);
+        await this.mutationApplier.applyMutation(serverMutation);
+      }
+      break;
+
+    case 'server-always-wins':
+      await this.rollbackMutation(localMutation.id);
+      await this.mutationApplier.applyMutation(serverMutation);
+      break;
+
+    case 'client-wins-if-newer':
+      if (localMutation.timestamp > serverMutation.timestamp) {
+        // Keep local mutation, server will sync from us
+        await this.sendToServer(localMutation, { force: true });
+      }
+      break;
+  }
+}
+```
+
+**Tasks:**
+
+- [ ] Implement conflict resolution strategies
+- [ ] Add configurable conflict resolution policies
+- [ ] Add conflict detection and logging
+- [ ] Add UI notifications for conflicts
+- [ ] Document conflict resolution behavior
+
+---
+
+#### 2.X.3 HTTP Retry Logic for Mutations
+
+**Status:** Deferred from Phase 1  
+**Rationale:** WebSocket already has reconnection logic. HTTP retry is optimization for edge cases.
+
+**Implementation:**
+
+```typescript
+// client/src/optimistic-updater.ts
+private async sendToServerWithRetry(mutation: Mutation): Promise<void> {
+  const maxRetries = this.options.maxRetries || 3;
+  const baseDelay = this.options.retryDelay || 1000;
+
+  let attempt = 0;
+  let lastError: Error;
+
+  while (attempt < maxRetries) {
+    try {
+      await this.sendToServer(mutation);
+      return; // Success
+    } catch (error) {
+      lastError = error;
+
+      // Don't retry on permission denied
+      if (error.status === 403 || error.status === 401) {
+        throw error;
+      }
+
+      // Don't retry on validation errors
+      if (error.status === 400) {
+        throw error;
+      }
+
+      attempt++;
+      if (attempt >= maxRetries) {
+        throw new Error(
+          `Failed after ${maxRetries} attempts: ${lastError.message}`
+        );
+      }
+
+      // Exponential backoff with jitter
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+```
+
+**Tasks:**
+
+- [ ] Add retry logic with exponential backoff
+- [ ] Add configurable retry policies
+- [ ] Add retry metrics and logging
+- [ ] Handle transient vs permanent errors
+- [ ] Document retry behavior
+
+---
+
+### �📦 Impact on Phase 1 Client SDK
 
 **Critical:** Phase 2 schema infrastructure requires changes to Phase 1 client SDK.
 

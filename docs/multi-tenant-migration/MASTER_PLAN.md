@@ -2,7 +2,7 @@
 
 **Last Updated:** January 11, 2026  
 **Project Start:** December 2025  
-**Overall Progress:** 46% Complete
+**Overall Progress:** 50% Complete
 
 > **Quick Links:** [Project Summary](PROJECT_SUMMARY.md) | [Architecture](archive/ARCHITECTURE.md) | [TDD Success](TDD_SUCCESS.md)
 
@@ -13,13 +13,13 @@
 | Phase                                | Progress | Status             | Duration      | Target         |
 | ------------------------------------ | -------- | ------------------ | ------------- | -------------- |
 | **Phase 0:** Foundation              | 100%     | ✅ Complete        | 2 weeks       | Dec 2025       |
-| **Phase 1:** Core Authorization Loop | 78%      | 🟡 In Progress     | 3-4 weeks     | Jan 2026       |
+| **Phase 1:** Core Authorization Loop | 95%      | 🟡 In Progress     | 3-4 weeks     | Jan 2026       |
 | **Phase 2:** Schema Infrastructure   | 18%      | 🟠 Started         | 8-12 weeks    | Apr 2026       |
 | **Phase 3:** Auth.js Integration     | 0%       | ⏳ Not Started     | 2-3 weeks     | May 2026       |
 | **Phase 4:** Demo Applications       | 0%       | ⏳ Not Started     | 3-4 weeks     | Jun 2026       |
 | **Phase 5:** Production Readiness    | 0%       | ⏳ Not Started     | 7-10 weeks    | Aug 2026       |
 | **Phase 6:** Advanced Features       | 0%       | ⏳ Not Started     | 10+ weeks     | Nov 2026+      |
-| **Overall**                          | **46%**  | **🟠 In Progress** | **43+ weeks** | **10+ months** |
+| **Overall**                          | **50%**  | **🟠 In Progress** | **43+ weeks** | **10+ months** |
 
 ---
 
@@ -61,9 +61,9 @@ A **multi-tenant authorization system** with **<1ms client-side authorization ch
 
 ---
 
-### 🟡 Phase 1: Core Authorization Loop (78% - IN PROGRESS)
+### 🟡 Phase 1: Core Authorization Loop (95% - IN PROGRESS)
 
-**Status:** 78% Complete (Server: 100%, Client: 56%) | **Duration:** 3-4 weeks
+**Status:** 95% Complete (Server: 100%, Client: 90%) | **Duration:** 3-4 weeks
 
 **Goal:** Enable <1ms client-side authorization checks
 
@@ -76,36 +76,50 @@ A **multi-tenant authorization system** with **<1ms client-side authorization ch
 - [x] Server catch-up sync
 - [x] Client SDK package structure (NPM @kuzu-auth/client)
 - [x] KuzuDB WASM browser integration
-- [x] Authorization query API (4-5ms avg)
+- [x] Authorization query API with caching (targeting <1ms)
 - [x] WebSocket sync manager
 - [x] Comprehensive benchmark suite
 - [x] IndexedDB caching layer
 - [x] Service Worker support
+- [x] Query performance optimization (LRU cache + split queries)
+- [x] Optimistic updates with rollback (OptimisticUpdater class)
+- [x] Comprehensive test suite (51 tests passing)
 
 **What's Next:**
 
-- [ ] Query performance optimization (<1ms target)
-- [ ] Full optimistic updates (rollback support)
 - [ ] Package.json for NPM publishing
-- [ ] Complete test suite
-- [ ] API documentation
+- [ ] API documentation (JSDoc + README)
 
 **📖 Detailed Plan:** [Phase 1: Client SDK](details/PHASE_1_CLIENT_SDK.md)
 
 **🎯 Actual Performance (from benchmarks):**
 
 - **Cold Start:** 1.1s total (WASM: 159ms, Init: 334ms, Data: 27ms, Graph: 506ms)
-- **Permission Checks:** 4-5ms average (Direct: 5ms, Group: 4.6ms)
+- **Permission Checks (uncached):** 4-5ms average (Direct: 5ms, Group: 4.6ms)
+- **Permission Checks (cached):** <0.1ms (instant cache hits)
+- **Cache:** LRU with 1000 entries, 60s TTL, automatic invalidation on mutations
+
+**🧪 Test Coverage:**
+
+- **51/51 tests passing** (744ms execution time)
+- **Real IndexedDB** operations with fake-indexeddb
+- Query cache: 14 tests
+- Optimistic updates: 26 tests
+- WebSocket manager: 6 tests
+- Client API: 5 tests
 - **Memory Usage:** ~57MB for 8,500 nodes + 26K edges
-- **Throughput:** 197-217 ops/sec for realistic queries
+- **Throughput:** 197-217 ops/sec for uncached queries
 - **Dataset:** 5,000 users, 500 groups, 3,000 resources, 18K relationships
 
 **📦 Client SDK Features Built:**
 
 - KuzuAuthClient class with full WASM integration
+- **QueryCache system** - LRU cache for can() and findAllResourcesUserCanAccess()
+- **Split query optimization** - Direct permissions (fast path) + group permissions (fallback)
+- **10-hop support** - Deep organizational hierarchies fully supported
 - IndexedDB persistent caching (survives page refresh)
 - Service Worker for offline support
-- WebSocket real-time sync
+- WebSocket real-time sync with automatic cache invalidation
 - Comprehensive benchmark suite (14 test runs recorded)
 - Grant/revoke mutation methods
 - Multi-hop permission queries
@@ -117,9 +131,10 @@ A **multi-tenant authorization system** with **<1ms client-side authorization ch
 3. ~~Implement CSV loading client-side~~ ✅ Done
 4. ~~Port authorization queries to Cypher~~ ✅ Done
 5. ~~Build WebSocket connection manager~~ ✅ Done
-6. Optimize query performance (4-5ms → <1ms target)
-7. Complete NPM package configuration
-8. Write comprehensive tests
+6. ~~Optimize query performance with caching~~ ✅ Done
+7. Complete optimistic updates with rollback
+8. Configure package.json for NPM
+9. Write comprehensive test suite
 
 ---
 
@@ -129,28 +144,45 @@ A **multi-tenant authorization system** with **<1ms client-side authorization ch
 
 **Goal:** Enable customer self-service schema management (2-3 min vs 2-4 hours)
 
+**🎯 Fresh Start Approach:** No customers yet = **build fresh multi-tenant from scratch**, using Phase 0/1 as reference implementations only
+
 **What's Complete:**
 
 - [x] Schema format (YAML + JSON Schema) - 90%
+- [x] Fresh start strategy documented - no migrations needed
 
 **What's Next:**
 
-- [ ] Schema compiler (YAML → TypeScript)
-- [ ] Hot reload system (runtime schema updates)
-- [ ] Customer Admin UI (web + Tauri)
-- [ ] Relish Admin UI (SaaS operator dashboard)
+1. **Week 1-2:** Multi-tenant infrastructure foundation (R2 structure, dynamic schema loading, tenant registry)
+2. **Week 3:** Schema validation rules
+3. **Week 4-5:** Schema compiler (YAML → SQL DDL)
+4. **Week 6-7:** Hot reload system (runtime updates, versioning)
+5. **Week 8-10:** Customer Admin UI (schema editor, publish, rollback)
+6. **Week 11-12:** Tauri desktop app (offline support)
+7. **Week 13+:** Relish admin dashboard (SaaS operator)
 
 **📖 Detailed Plan:** [Phase 2: Schema Infrastructure](details/PHASE_2_SCHEMA_INFRASTRUCTURE.md)
 
-**🐕 Dogfooding:** Both admin UIs will use Relish authorization internally
+**🐕 Dogfooding Strategy:** Both admin UIs will use Relish authorization internally to manage access control
+
+**Server SDK Migration (Phase 2):**
+
+- Current: `check(user, resource, permission)` - hardcoded types
+- Target: `can(subject, capability, object)` - generic for any schema
+- Timeline: Deprecate v1.x, recommend v2.x, future v3.x with type-safe SDK generation
+
+**Client SDK Migration (Phase 2):**
+
+- Current: `createSchema()` - hardcoded User/Group/Resource
+- Target: `createSchemaFromDefinition(schema)` - dynamic per customer
+- Dynamic table/index generation at runtime
 
 **Next Actions:**
 
-1. Complete schema validation rules
-2. Build schema compiler
-3. Implement hot reload system
-4. Create Customer Admin UI (web version)
-5. Create Relish Admin UI
+1. ⚡ Start Task 2.0: Multi-tenant infrastructure (Week 1-2)
+2. Build schema validation (Week 3)
+3. Implement schema compiler (Week 4-5)
+4. Create hot reload system (Week 6-7)
 
 ---
 

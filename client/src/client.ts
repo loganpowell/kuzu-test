@@ -5,6 +5,8 @@ import {
   type MutationMessage,
   type ConnectionState,
 } from "./websocket-manager";
+import { QueryCache } from "./query-cache";
+import { OptimisticUpdater, type PendingMutation } from "./optimistic-updater";
 
 /**
  * IndexedDB schema for storing graph data
@@ -42,6 +44,14 @@ export class KuzuAuthClient {
   private useMultiThreadedCDN: boolean;
   private currentVersion: number = 0;
 
+  // Query caching for performance
+  private queryCache: QueryCache<boolean>;
+  private resourceCache: QueryCache<string[]>;
+
+  // Optimistic updates
+  private optimisticUpdater: OptimisticUpdater | null = null;
+  private enableOptimisticUpdates: boolean = true;
+
   // Cold start timing metrics
   public coldStartTimings: {
     wasmDownload: number;
@@ -55,11 +65,19 @@ export class KuzuAuthClient {
   constructor(
     serverUrl: string,
     orgId: string,
-    options: { useMultiThreadedCDN?: boolean } = {}
+    options: {
+      useMultiThreadedCDN?: boolean;
+      enableOptimisticUpdates?: boolean;
+    } = {}
   ) {
     this.serverUrl = serverUrl;
     this.orgId = orgId;
     this.useMultiThreadedCDN = options.useMultiThreadedCDN ?? false;
+    this.enableOptimisticUpdates = options.enableOptimisticUpdates ?? true;
+
+    // Initialize caches with 1000 entries, 60s TTL
+    this.queryCache = new QueryCache<boolean>(1000, 60000);
+    this.resourceCache = new QueryCache<string[]>(500, 60000);
   }
 
   /**
@@ -99,9 +117,12 @@ export class KuzuAuthClient {
     console.log(
       "[KuzuAuthClient] Loading multi-threaded WASM from CDN (cached)..."
     );
-    const kuzu_wasm = await import(
-      "https://cdn.jsdelivr.net/npm/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js"
+
+    // Dynamic import - TypeScript can't resolve CDN URLs at compile time
+    const importKuzuWasm = new Function(
+      'return import("https://cdn.jsdelivr.net/npm/@kuzu/kuzu-wasm@latest/dist/kuzu-browser.js")'
     );
+    const kuzu_wasm = await importKuzuWasm();
     const kuzu = await kuzu_wasm.default();
     window.kuzu = kuzu;
 
@@ -569,23 +590,49 @@ export class KuzuAuthClient {
 
   /**
    * Check if a user can perform an action on a resource
+   * Optimized with caching and better query performance
    */
   async can(
     userId: string,
     capability: string,
     resourceId: string
   ): Promise<boolean> {
-    // Query for direct user permission or inherited group permission
-    const query = `
-      MATCH path = (u:User {id: $userId})-[*1..10]->(r:Resource {id: $resourceId})
-      WHERE ANY(rel IN relationships(path) WHERE 
-        (type(rel) = 'USER_PERMISSION' AND rel.capability = $capability) OR
-        (type(rel) = 'GROUP_PERMISSION' AND rel.capability = $capability)
-      )
+    // Check cache first
+    const cacheKey = `${userId}:${capability}:${resourceId}`;
+    const cached = this.queryCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    // Optimized query: check direct permission first (fastest path)
+    const directQuery = `
+      MATCH (u:User {id: $userId})-[p:USER_PERMISSION {capability: $capability}]->(r:Resource {id: $resourceId})
       RETURN COUNT(*) > 0 AS has_permission
     `;
 
-    const result = await this.executeQuery(query, {
+    let result = await this.executeQuery(directQuery, {
+      userId,
+      capability,
+      resourceId,
+    });
+
+    try {
+      let rows = await result.getAllObjects();
+      if (rows.length > 0 && rows[0].has_permission) {
+        this.queryCache.set(cacheKey, true);
+        return true;
+      }
+    } finally {
+      await result.close();
+    }
+
+    // Check group permissions (secondary path, up to 10 hops for deep org structures)
+    const groupQuery = `
+      MATCH (u:User {id: $userId})-[:MEMBER_OF*1..10]->(g:UserGroup)-[p:GROUP_PERMISSION {capability: $capability}]->(r:Resource {id: $resourceId})
+      RETURN COUNT(*) > 0 AS has_permission
+    `;
+
+    result = await this.executeQuery(groupQuery, {
       userId,
       capability,
       resourceId,
@@ -593,32 +640,54 @@ export class KuzuAuthClient {
 
     try {
       const rows = await result.getAllObjects();
-      return rows.length > 0 && rows[0].has_permission;
+      const hasPermission = rows.length > 0 && rows[0].has_permission;
+      this.queryCache.set(cacheKey, hasPermission);
+      return hasPermission;
     } finally {
-      // Always close the result to free memory
       await result.close();
     }
   }
 
   /**
    * Find all resources a user can access
+   * Optimized with caching and separate direct/group queries
    */
   async findAllResourcesUserCanAccess(
     userId: string,
     capability: string
   ): Promise<string[]> {
-    const query = `
-      MATCH path = (u:User {id: $userId})-[*1..10]->(r:Resource)
-      WHERE ANY(rel IN relationships(path) WHERE 
-        (type(rel) = 'USER_PERMISSION' AND rel.capability = $capability) OR
-        (type(rel) = 'GROUP_PERMISSION' AND rel.capability = $capability)
-      )
+    // Check cache first
+    const cacheKey = `resources:${userId}:${capability}`;
+    const cached = this.resourceCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const resources = new Set<string>();
+
+    // Query 1: Direct user permissions (fast)
+    const directQuery = `
+      MATCH (u:User {id: $userId})-[p:USER_PERMISSION {capability: $capability}]->(r:Resource)
       RETURN DISTINCT r.id AS resource_id
     `;
 
-    const result = await this.executeQuery(query, { userId, capability });
-    const rows = result.getAll();
-    return rows.map((row) => row.resource_id);
+    let result = await this.executeQuery(directQuery, { userId, capability });
+    let rows = result.getAll();
+    rows.forEach((row) => resources.add(row.resource_id));
+
+    // Query 2: Group permissions (supports deep org hierarchies up to 10 hops)
+    const groupQuery = `
+      MATCH (u:User {id: $userId})-[:MEMBER_OF*1..10]->(g:UserGroup)-[p:GROUP_PERMISSION {capability: $capability}]->(r:Resource)
+      RETURN DISTINCT r.id AS resource_id
+    `;
+
+    result = await this.executeQuery(groupQuery, { userId, capability });
+    rows = result.getAll();
+    rows.forEach((row) => resources.add(row.resource_id));
+
+    const resourceList = Array.from(resources);
+    this.resourceCache.set(cacheKey, resourceList);
+    return resourceList;
   }
 
   /**
@@ -626,9 +695,9 @@ export class KuzuAuthClient {
    */
   connectWebSocket(): void {
     const wsUrl = this.serverUrl.replace("http", "ws");
-    this.wsConnection = new WebSocket(`${wsUrl}/sync/${this.orgId}`);
+    this.connection = new WebSocket(`${wsUrl}/sync/${this.orgId}`);
 
-    this.wsConnection.onmessage = async (event) => {
+    this.connection.onmessage = async (event) => {
       const message = JSON.parse(event.data);
 
       if (message.type === "permission_granted") {
@@ -650,13 +719,13 @@ export class KuzuAuthClient {
   }
 
   /**
-   * Grant permission via WebSocket mutation
+   * Grant permission via WebSocket mutation with optimistic updates
    */
   async grant(
     user: string,
     permission: string,
     resource: string
-  ): Promise<{ success: boolean; version?: number }> {
+  ): Promise<{ success: boolean; version?: number; mutationId?: string }> {
     if (!this.wsManager || this.wsManager.getState() !== "connected") {
       throw new Error(
         "WebSocket not connected. Call initialize() and wait for connection."
@@ -667,18 +736,51 @@ export class KuzuAuthClient {
       `[KuzuAuthClient] Granting ${permission} on ${resource} to ${user}`
     );
 
-    const result = await this.wsManager.sendMutation(
-      "grant",
-      user,
-      permission,
-      resource
-    );
+    let mutationId: string | undefined;
 
-    if (!result.success) {
-      throw new Error(result.error || "Grant failed");
+    // Apply optimistically if enabled
+    if (this.enableOptimisticUpdates && this.optimisticUpdater) {
+      mutationId = await this.optimisticUpdater.applyOptimistically(
+        "grant",
+        user,
+        permission,
+        resource
+      );
+      console.log(
+        `[KuzuAuthClient] Applied grant optimistically (${mutationId})`
+      );
     }
 
-    return result;
+    // Send to server
+    try {
+      const result = await this.wsManager.sendMutation(
+        "grant",
+        user,
+        permission,
+        resource
+      );
+
+      if (!result.success) {
+        // Rollback on failure
+        if (mutationId && this.optimisticUpdater) {
+          await this.optimisticUpdater.rollbackMutation(mutationId);
+        }
+        throw new Error(result.error || "Grant failed");
+      }
+
+      // Confirm on success
+      if (mutationId && this.optimisticUpdater) {
+        this.optimisticUpdater.confirmMutation(mutationId);
+      }
+
+      return { ...result, mutationId };
+    } catch (error) {
+      // Rollback on error
+      if (mutationId && this.optimisticUpdater) {
+        await this.optimisticUpdater.rollbackMutation(mutationId);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -696,16 +798,20 @@ export class KuzuAuthClient {
     `,
       { userId, capability, resourceId }
     );
+
+    // Invalidate caches for this user and resource
+    this.queryCache.invalidate(`${userId}:`);
+    this.resourceCache.invalidate(`resources:${userId}:`);
   }
 
   /**
-   * Revoke permission via WebSocket mutation
+   * Revoke permission via WebSocket mutation with optimistic updates
    */
   async revoke(
     user: string,
     permission: string,
     resource: string
-  ): Promise<{ success: boolean; version?: number }> {
+  ): Promise<{ success: boolean; version?: number; mutationId?: string }> {
     if (!this.wsManager || this.wsManager.getState() !== "connected") {
       throw new Error(
         "WebSocket not connected. Call initialize() and wait for connection."
@@ -716,18 +822,51 @@ export class KuzuAuthClient {
       `[KuzuAuthClient] Revoking ${permission} on ${resource} from ${user}`
     );
 
-    const result = await this.wsManager.sendMutation(
-      "revoke",
-      user,
-      permission,
-      resource
-    );
+    let mutationId: string | undefined;
 
-    if (!result.success) {
-      throw new Error(result.error || "Revoke failed");
+    // Apply optimistically if enabled
+    if (this.enableOptimisticUpdates && this.optimisticUpdater) {
+      mutationId = await this.optimisticUpdater.applyOptimistically(
+        "revoke",
+        user,
+        permission,
+        resource
+      );
+      console.log(
+        `[KuzuAuthClient] Applied revoke optimistically (${mutationId})`
+      );
     }
 
-    return result;
+    // Send to server
+    try {
+      const result = await this.wsManager.sendMutation(
+        "revoke",
+        user,
+        permission,
+        resource
+      );
+
+      if (!result.success) {
+        // Rollback on failure
+        if (mutationId && this.optimisticUpdater) {
+          await this.optimisticUpdater.rollbackMutation(mutationId);
+        }
+        throw new Error(result.error || "Revoke failed");
+      }
+
+      // Confirm on success
+      if (mutationId && this.optimisticUpdater) {
+        this.optimisticUpdater.confirmMutation(mutationId);
+      }
+
+      return { ...result, mutationId };
+    } catch (error) {
+      // Rollback on error
+      if (mutationId && this.optimisticUpdater) {
+        await this.optimisticUpdater.rollbackMutation(mutationId);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -745,6 +884,10 @@ export class KuzuAuthClient {
     `,
       { userId, capability, resourceId }
     );
+
+    // Invalidate caches for this user and resource
+    this.queryCache.invalidate(`${userId}:`);
+    this.resourceCache.invalidate(`resources:${userId}:`);
   }
 
   /**
@@ -808,6 +951,17 @@ export class KuzuAuthClient {
       onStateChange: (state) => this.handleConnectionStateChange(state),
       onError: (error) => this.handleConnectionError(error),
     });
+
+    // Initialize optimistic updater
+    this.optimisticUpdater = new OptimisticUpdater(
+      this,
+      (mutationId, error) => {
+        console.error(
+          `[KuzuAuthClient] Rolled back mutation ${mutationId}:`,
+          error
+        );
+      }
+    );
 
     // Connect with current version (0 for now, will track mutations later)
     this.wsManager.connect(this.currentVersion);
@@ -932,6 +1086,20 @@ export class KuzuAuthClient {
       await this.idb.clear("csv_data");
       console.log("[KuzuAuthClient] IndexedDB cache cleared");
     }
+  }
+
+  /**
+   * Get pending mutations count (optimistic updates not yet confirmed)
+   */
+  getPendingMutationsCount(): number {
+    return this.optimisticUpdater?.getPendingCount() || 0;
+  }
+
+  /**
+   * Get all pending mutations
+   */
+  getPendingMutations(): PendingMutation[] {
+    return this.optimisticUpdater?.getPendingMutations() || [];
   }
 
   /**

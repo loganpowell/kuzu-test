@@ -11,7 +11,12 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
+
+    /* Build output */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
 
     /* Linting */
     "strict": true,
@@ -19,5 +24,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*", "benchmarks/**/*"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "benchmarks", "tests"]
 }
