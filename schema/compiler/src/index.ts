@@ -6,8 +6,7 @@
 
 export { SchemaParser } from "./parser.js";
 export { TypeGenerator } from "./generators/type-generator.js";
-export { SQLGenerator } from "./generators/sql-generator.js";
-export * from "./types.js";
+export { SQLGenerator } from "./generators/sql-generator.js";export { SchemaWatcher, watchSchema } from './watcher.js';export * from "./types.js";
 
 import { SchemaParser } from "./parser.js";
 import { TypeGenerator } from "./generators/type-generator.js";

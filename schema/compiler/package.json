@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "schema-compile": "dist/cli.js"
+    "schema-compile": "dist/cli.js",
+    "schema-watch": "dist/watch-cli.js"
   },
   "scripts": {
     "build": "tsc",

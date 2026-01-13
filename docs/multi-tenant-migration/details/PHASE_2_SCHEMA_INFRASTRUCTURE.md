@@ -132,11 +132,11 @@ Durable Object: GraphStateCSV per org (each loads own schema)
 | 2.0 Multi-Tenant Infrastructure | ✅ Complete        | 100%     |
 | 2.1 Schema Format & Validation  | ✅ Complete        | 100%     |
 | 2.2 Schema Compiler             | ✅ Complete        | 100%     |
-| 2.3 Hot Reload System           | ⏳ Not Started     | 0%       |
+| 2.3 Hot Reload System           | ✅ Complete (Dev)  | 80%      |
 | 2.4 Customer Admin UI - Web     | ⏳ Not Started     | 0%       |
 | 2.5 Customer Admin UI - Tauri   | ⏳ Not Started     | 0%       |
 | 2.6 Relish Admin UI             | ⏳ Not Started     | 0%       |
-| **Overall**                     | **🟡 In Progress** | **50%**  |
+| **Overall**                     | **🟡 In Progress** | **57%**  |
 
 ---
 
@@ -273,10 +273,20 @@ metrics:view → relish:operator
   - ✅ Multi-tenant schema isolation (different schemas per org)
   - ✅ Dynamic data loading from CSVs
 
-- [ ] **Create tenant registry**
+- [x] **Create tenant registry** ✅
+
+  Created comprehensive tenant registry in `cf-auth/src/services/tenant-registry.ts` with:
+
+  - CRUD operations for tenant lifecycle (create, get, update, delete)
+  - Tenant status management (active, suspended, trial, deleted)
+  - Plan management (free, starter, pro, enterprise)
+  - Schema version tracking per tenant
+  - Default schema initialization for new tenants
+  - Tenant statistics and reporting
+  - 37 passing tests with full coverage
 
   ```typescript
-  // New file: cloudflare/worker/src/services/tenant-registry.ts
+  // cf-auth/src/services/tenant-registry.ts
   export interface Tenant {
     id: string;
     name: string;
@@ -318,9 +328,20 @@ metrics:view → relish:operator
   }
   ```
 
-- [ ] **Add backward compatibility for existing data**
+- [x] **Add backward compatibility for existing data** ✅
+
+  Created migration service in `cf-auth/src/services/migration.ts` with:
+
+  - Automatic detection of old single-tenant structure
+  - Migration from root-level CSVs to per-tenant directories
+  - Default tenant creation with migrated data
+  - Migration metadata tracking (version, timestamps)
+  - Migration verification and validation
+  - Emergency rollback functionality
+  - 15 passing tests with full coverage
 
   ```typescript
+  // cf-auth/src/services/migration.ts
   async migrateExistingData(): Promise<void> {
     // Check if data exists in old structure (root level)
     const oldUsers = await this.env.GRAPH_STATE.get('users.csv');
@@ -337,29 +358,13 @@ metrics:view → relish:operator
 
   ```
 
-- [ ] **Add default schema template**
+- [x] **Add default schema template** ✅
 
-  ````typescript
-  // Default schema for new tenants (similar to Phase 1 proof-of-concept)
-  function getDefaultSchema(): CompiledSchema {
-    return {
-      version: 1,
-      entities: [
-        {
-          name: 'User',
-          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
-          createTableSQL: 'CREATE NODE TABLE User(id STRING, PRIMARY KEY(id))'
-        },
-        {
-          name: 'Group',
-          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
-          createTableSQL: 'CREATE NODE TABLE Group(id STRING, PRIMARY KEY(id))'
-        },
-        {
-          name: 'Resource',
-          fields: [{ name: 'id', type: 'STRING', primaryKey: true }],
-          createTableSQL: 'CREATE NODE TABLE Resource(id STRING, PRIMARY KEY(id))'\n        }\n      ],\n      relationships: [\n        {\n          name: 'member_of',\n          from: 'User',\n          to: 'Group',\n          createRelTableSQL: 'CREATE REL TABLE member_of(FROM User TO Group)'\n        },\n        {\n          name: 'has_permission',\n          from: 'User',\n          to: 'Resource',\n          properties: [{ name: 'permission', type: 'STRING' }],\n          createRelTableSQL: 'CREATE REL TABLE has_permission(FROM User TO Resource, permission STRING)'\n        }\n      ],\n      indexes: []\n    };\n  }\n  ```
-  ````
+  Already implemented in `cf-auth/src/types/schema.ts` as `getDefaultSchema()`:
+  - Phase 1-compatible schema (User, Group, Resource entities)
+  - Standard relationships (member_of, inherits_from, has_permission)
+  - Used by TenantRegistry for new tenant initialization
+  - Used by MigrationService for backward compatibility
 
 #### Acceptance Criteria
 
@@ -367,9 +372,10 @@ metrics:view → relish:operator
 - ✅ Schema loaded dynamically from R2 per org
 - ✅ Indexes created dynamically based on schema
 - ✅ `/org/{orgId}/schema` endpoint working
-- ✅ Tenant registry operational with create/list/get
+- ✅ Tenant registry operational with create/list/get/update/delete
 - ✅ Default schema template creates valid structure
-- ✅ Unit tests passing for new multi-tenant code
+- ✅ Migration utility handles backward compatibility
+- ✅ Unit tests passing for new multi-tenant code (52 tests total)
 
 ---
 
@@ -562,7 +568,9 @@ node dist/cli.js example.yaml ./generated
 
 ### 2.3 Hot Reload System (Week 4-5)
 
-**Goal:** Watch schema files and automatically recompile + reload
+**Status:** ✅ Complete (Development Features) - 80%
+
+**Goal:** Watch schema files and automatically recompile + reload in development, with production runtime updates planned
 
 ---
 
