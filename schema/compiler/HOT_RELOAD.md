@@ -30,6 +30,7 @@ node dist/watch-cli.js schema.yaml ./output
 ```
 
 Output:
+
 ```
 👀 Watching example.yaml for changes...
 ✅ Schema compiled successfully
@@ -47,20 +48,20 @@ Stop watching with `Ctrl+C`.
 ### Programmatic API
 
 ```typescript
-import { watchSchema, SchemaWatcher } from '@relish/schema-compiler';
+import { watchSchema, SchemaWatcher } from "@relish/schema-compiler";
 
 // Simple usage
 const watcher = watchSchema({
-  inputFile: 'schema.yaml',
-  outputDir: './generated',
+  inputFile: "schema.yaml",
+  outputDir: "./generated",
   onCompile: (success, error) => {
     if (success) {
-      console.log('Schema updated!');
+      console.log("Schema updated!");
     } else {
-      console.error('Compilation failed:', error);
+      console.error("Compilation failed:", error);
     }
   },
-  debounce: 300 // milliseconds (optional, default: 300)
+  debounce: 300, // milliseconds (optional, default: 300)
 });
 
 // Stop watching
@@ -68,15 +69,15 @@ watcher.stop();
 
 // Advanced usage with custom options
 const customWatcher = new SchemaWatcher({
-  inputFile: 'schema.yaml',
-  outputDir: './generated',
+  inputFile: "schema.yaml",
+  outputDir: "./generated",
   onCompile: (success, error) => {
     if (success) {
       // Trigger hot reload in your app
       broadcastSchemaUpdate();
     }
   },
-  debounce: 500
+  debounce: 500,
 });
 
 customWatcher.start();
@@ -129,6 +130,7 @@ Six comprehensive tests:
 6. ✅ Stop watching when stop() is called
 
 Run tests:
+
 ```bash
 cd schema/compiler
 pnpm test
@@ -140,51 +142,53 @@ pnpm test
 
 ```typescript
 // vite.config.ts or similar
-import { watchSchema } from '@relish/schema-compiler';
+import { watchSchema } from "@relish/schema-compiler";
 
 export default {
   plugins: [
     {
-      name: 'schema-watcher',
+      name: "schema-watcher",
       configureServer() {
         watchSchema({
-          inputFile: 'schema.yaml',
-          outputDir: './src/generated',
+          inputFile: "schema.yaml",
+          outputDir: "./src/generated",
           onCompile: (success) => {
             if (success) {
               // Trigger HMR
-              server.ws.send({ type: 'full-reload' });
+              server.ws.send({ type: "full-reload" });
             }
-          }
+          },
         });
-      }
-    }
-  ]
+      },
+    },
+  ],
 };
 ```
 
 ### With Custom Workflows
 
 ```typescript
-import { watchSchema } from '@relish/schema-compiler';
-import { WebSocketServer } from 'ws';
+import { watchSchema } from "@relish/schema-compiler";
+import { WebSocketServer } from "ws";
 
 const wss = new WebSocketServer({ port: 8080 });
 
 watchSchema({
-  inputFile: 'schema.yaml',
-  outputDir: './generated',
+  inputFile: "schema.yaml",
+  outputDir: "./generated",
   onCompile: (success) => {
     if (success) {
       // Notify all connected clients
-      wss.clients.forEach(client => {
-        client.send(JSON.stringify({ 
-          type: 'schema-update',
-          timestamp: Date.now()
-        }));
+      wss.clients.forEach((client) => {
+        client.send(
+          JSON.stringify({
+            type: "schema-update",
+            timestamp: Date.now(),
+          })
+        );
       });
     }
-  }
+  },
 });
 ```
 

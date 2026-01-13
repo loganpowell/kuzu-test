@@ -133,10 +133,10 @@ Durable Object: GraphStateCSV per org (each loads own schema)
 | 2.1 Schema Format & Validation  | ✅ Complete        | 100%     |
 | 2.2 Schema Compiler             | ✅ Complete        | 100%     |
 | 2.3 Hot Reload System           | ✅ Complete (Dev)  | 80%      |
-| 2.4 Customer Admin UI - Web     | ⏳ Not Started     | 0%       |
+| 2.4 Customer Admin UI - Web     | 🟡 In Progress     | 15%      |
 | 2.5 Customer Admin UI - Tauri   | ⏳ Not Started     | 0%       |
 | 2.6 Relish Admin UI             | ⏳ Not Started     | 0%       |
-| **Overall**                     | **🟡 In Progress** | **57%**  |
+| **Overall**                     | **🟡 In Progress** | **59%**  |
 
 ---
 
@@ -361,6 +361,7 @@ metrics:view → relish:operator
 - [x] **Add default schema template** ✅
 
   Already implemented in `cf-auth/src/types/schema.ts` as `getDefaultSchema()`:
+
   - Phase 1-compatible schema (User, Group, Resource entities)
   - Standard relationships (member_of, inherits_from, has_permission)
   - Used by TenantRegistry for new tenant initialization

@@ -21,8 +21,8 @@ Build a **visual schema editor** for tenant administrators to manage their autho
 
 | Component                           | Status             | Progress |
 | ----------------------------------- | ------------------ | -------- |
-| 2.4.1 Project Setup                 | ⏳ Not Started     | 0%       |
-| 2.4.2 Schema Canvas (Drag-and-Drop) | ⏳ Not Started     | 0%       |
+| 2.4.1 Project Setup                 | ✅ Complete        | 100%     |
+| 2.4.2 Schema Canvas (Drag-and-Drop) | 🟡 In Progress     | 20%      |
 | 2.4.3 Entity Editor Panel           | ⏳ Not Started     | 0%       |
 | 2.4.4 Field Configuration           | ⏳ Not Started     | 0%       |
 | 2.4.5 Code Preview (Monaco)         | ⏳ Not Started     | 0%       |
@@ -30,7 +30,7 @@ Build a **visual schema editor** for tenant administrators to manage their autho
 | 2.4.7 Validation & Error Display    | ⏳ Not Started     | 0%       |
 | 2.4.8 Schema Activation             | ⏳ Not Started     | 0%       |
 | 2.4.9 Deploy to Cloudflare Pages    | ⏳ Not Started     | 0%       |
-| **Overall**                         | **⏳ Not Started** | **0%**   |
+| **Overall**                         | **🟡 In Progress** | **15%**  |
 
 ---
 

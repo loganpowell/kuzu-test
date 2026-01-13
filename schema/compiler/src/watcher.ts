@@ -1,15 +1,15 @@
 /**
  * Schema File Watcher
- * 
+ *
  * Phase 2.3: Hot Reload System
- * 
+ *
  * Watches schema files for changes and automatically recompiles them
  */
 
-import { watch } from 'fs';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname, basename } from 'path';
-import { compile } from './index.js';
+import { watch } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { join, dirname, basename } from "path";
+import { compile } from "./index.js";
 
 export interface WatcherOptions {
   inputFile: string;
@@ -40,7 +40,7 @@ export class SchemaWatcher {
 
     // Watch for changes
     this.watcher = watch(inputFile, (eventType) => {
-      if (eventType === 'change') {
+      if (eventType === "change") {
         this.handleChange();
       }
     });
@@ -49,7 +49,7 @@ export class SchemaWatcher {
   stop(): void {
     if (this.watcher) {
       this.watcher.close();
-      console.log('🛑 Stopped watching schema file');
+      console.log("🛑 Stopped watching schema file");
     }
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -63,7 +63,7 @@ export class SchemaWatcher {
     }
 
     this.debounceTimer = setTimeout(() => {
-      console.log('📝 Schema file changed, recompiling...');
+      console.log("📝 Schema file changed, recompiling...");
       this.compileSchema();
     }, this.options.debounce);
   }
@@ -73,8 +73,8 @@ export class SchemaWatcher {
 
     try {
       // Read input file
-      const content = readFileSync(inputFile, 'utf-8');
-      const format = inputFile.endsWith('.json') ? 'json' : 'yaml';
+      const content = readFileSync(inputFile, "utf-8");
+      const format = inputFile.endsWith(".json") ? "json" : "yaml";
 
       // Compile schema
       const output = compile(content, format);
@@ -83,12 +83,15 @@ export class SchemaWatcher {
       mkdirSync(outputDir, { recursive: true });
 
       // Write output files
-      const baseName = basename(inputFile, format === 'json' ? '.json' : '.yaml');
-      
+      const baseName = basename(
+        inputFile,
+        format === "json" ? ".json" : ".yaml"
+      );
+
       writeFileSync(join(outputDir, `${baseName}.types.ts`), output.types);
       writeFileSync(join(outputDir, `${baseName}.sql`), output.sql);
 
-      console.log('✅ Schema compiled successfully');
+      console.log("✅ Schema compiled successfully");
       console.log(`   → ${join(outputDir, `${baseName}.types.ts`)}`);
       console.log(`   → ${join(outputDir, `${baseName}.sql`)}`);
 
@@ -96,7 +99,7 @@ export class SchemaWatcher {
         onCompile(true);
       }
     } catch (error) {
-      console.error('❌ Compilation failed:', (error as Error).message);
+      console.error("❌ Compilation failed:", (error as Error).message);
       if (onCompile) {
         onCompile(false, error as Error);
       }
