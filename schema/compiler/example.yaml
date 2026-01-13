@@ -1,0 +1,132 @@
+version: "1.0"
+name: "Relish Authorization Schema"
+description: "Multi-tenant authorization graph with ReBAC"
+
+entities:
+  User:
+    description: "Application user or service account"
+    fields:
+      - name: id
+        type: string
+        required: true
+      - name: email
+        type: string
+        unique: true
+      - name: name
+        type: string
+      - name: active
+        type: boolean
+        default: true
+      - name: created_at
+        type: timestamp
+    indexes:
+      - fields: [email]
+        unique: true
+
+  Group:
+    description: "User group or team"
+    fields:
+      - name: id
+        type: string
+        required: true
+      - name: name
+        type: string
+        required: true
+      - name: description
+        type: string
+      - name: created_at
+        type: timestamp
+
+  Resource:
+    description: "Protected resource (document, folder, API, etc.)"
+    fields:
+      - name: id
+        type: string
+        required: true
+      - name: type
+        type: enum
+        enum: [document, folder, project, api, database]
+        required: true
+      - name: name
+        type: string
+        required: true
+      - name: owner_id
+        type: string
+        required: true
+      - name: created_at
+        type: timestamp
+
+  Role:
+    description: "Role definition with permissions"
+    fields:
+      - name: id
+        type: string
+        required: true
+      - name: name
+        type: string
+        required: true
+      - name: description
+        type: string
+      - name: permissions
+        type: json
+
+relationships:
+  member_of:
+    description: "User is a member of a group"
+    from: User
+    to: Group
+    cardinality: many-to-many
+    properties:
+      - name: joined_at
+        type: timestamp
+
+  inherits_from:
+    description: "Group inherits permissions from another group"
+    from: Group
+    to: Group
+    cardinality: many-to-many
+
+  has_permission:
+    description: "Direct user permission on a resource"
+    from: User
+    to: Resource
+    cardinality: many-to-many
+    properties:
+      - name: permission
+        type: enum
+        enum: [read, write, delete, admin]
+        required: true
+      - name: granted_at
+        type: timestamp
+      - name: granted_by
+        type: string
+
+  group_permission:
+    description: "Group permission on a resource"
+    from: Group
+    to: Resource
+    cardinality: many-to-many
+    properties:
+      - name: permission
+        type: enum
+        enum: [read, write, delete, admin]
+        required: true
+      - name: granted_at
+        type: timestamp
+
+  has_role:
+    description: "User has a role"
+    from: User
+    to: Role
+    cardinality: many-to-many
+    properties:
+      - name: scope
+        type: string
+      - name: assigned_at
+        type: timestamp
+
+  owns:
+    description: "User owns a resource"
+    from: User
+    to: Resource
+    cardinality: one-to-many
